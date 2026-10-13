@@ -1,0 +1,21 @@
+{
+  "lastUpdated": "2026-10-13T12:00:00Z",
+  "source": "Optional automated status feed",
+  "servers": {
+    "server-placeholder-1": {
+      "players": 42,
+      "maxPlayers": 64,
+      "online": true
+    },
+    "server-placeholder-2": {
+      "players": 78,
+      "maxPlayers": 100,
+      "online": true
+    },
+    "server-placeholder-3": {
+      "players": 28,
+      "maxPlayers": 48,
+      "online": true
+    }
+  }
+}

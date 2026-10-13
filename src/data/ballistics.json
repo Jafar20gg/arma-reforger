@@ -1,0 +1,188 @@
+{
+  "gameVersion": "Arma Reforger v1.2.x (Community Reference Table)",
+  "lastUpdated": "2026-10-13",
+  "isPlaceholder": true,
+  "sourceNote": "PLACEHOLDER / REFERENCE DATA: Calibrated based on Arma Reforger 81mm M252 and 82mm 2B14 standard tables. You can customize, import, and export exact values matching your server or game patch in the Ballistics Editor (محرر البيانات).",
+  "mortars": {
+    "M252": {
+      "id": "M252",
+      "name": "M252 81mm Mortar (US / NATO)",
+      "nameAr": "هاون M252 عيار 81 ملم (الجيش الأمريكي / الناتو)",
+      "faction": "US",
+      "caliber": "81mm",
+      "defaultMilSystem": "6400",
+      "charges": {
+        "0": {
+          "charge": 0,
+          "min_range_m": 80,
+          "max_range_m": 460,
+          "entries": [
+            { "range_m": 80, "elevation_mil": 1515, "delev_per_100m": -12, "time_of_flight_s": 12 },
+            { "range_m": 100, "elevation_mil": 1500, "delev_per_100m": -13, "time_of_flight_s": 13 },
+            { "range_m": 150, "elevation_mil": 1460, "delev_per_100m": -15, "time_of_flight_s": 14 },
+            { "range_m": 200, "elevation_mil": 1415, "delev_per_100m": -16, "time_of_flight_s": 15 },
+            { "range_m": 250, "elevation_mil": 1365, "delev_per_100m": -18, "time_of_flight_s": 16 },
+            { "range_m": 300, "elevation_mil": 1310, "delev_per_100m": -20, "time_of_flight_s": 17 },
+            { "range_m": 350, "elevation_mil": 1245, "delev_per_100m": -22, "time_of_flight_s": 18 },
+            { "range_m": 400, "elevation_mil": 1165, "delev_per_100m": -25, "time_of_flight_s": 19 },
+            { "range_m": 460, "elevation_mil": 1050, "delev_per_100m": -29, "time_of_flight_s": 20 }
+          ]
+        },
+        "1": {
+          "charge": 1,
+          "min_range_m": 200,
+          "max_range_m": 1480,
+          "entries": [
+            { "range_m": 200, "elevation_mil": 1520, "delev_per_100m": -8, "time_of_flight_s": 17 },
+            { "range_m": 300, "elevation_mil": 1490, "delev_per_100m": -9, "time_of_flight_s": 18 },
+            { "range_m": 400, "elevation_mil": 1455, "delev_per_100m": -10, "time_of_flight_s": 19 },
+            { "range_m": 500, "elevation_mil": 1420, "delev_per_100m": -11, "time_of_flight_s": 20 },
+            { "range_m": 600, "elevation_mil": 1380, "delev_per_100m": -12, "time_of_flight_s": 21 },
+            { "range_m": 700, "elevation_mil": 1340, "delev_per_100m": -13, "time_of_flight_s": 22 },
+            { "range_m": 800, "elevation_mil": 1295, "delev_per_100m": -14, "time_of_flight_s": 23 },
+            { "range_m": 900, "elevation_mil": 1250, "delev_per_100m": -15, "time_of_flight_s": 24 },
+            { "range_m": 1000, "elevation_mil": 1200, "delev_per_100m": -16, "time_of_flight_s": 25 },
+            { "range_m": 1100, "elevation_mil": 1145, "delev_per_100m": -17, "time_of_flight_s": 26 },
+            { "range_m": 1200, "elevation_mil": 1085, "delev_per_100m": -18, "time_of_flight_s": 27 },
+            { "range_m": 1300, "elevation_mil": 1015, "delev_per_100m": -20, "time_of_flight_s": 28 },
+            { "range_m": 1400, "elevation_mil": 930, "delev_per_100m": -22, "time_of_flight_s": 29 },
+            { "range_m": 1480, "elevation_mil": 800, "delev_per_100m": -25, "time_of_flight_s": 30 }
+          ]
+        },
+        "2": {
+          "charge": 2,
+          "min_range_m": 450,
+          "max_range_m": 2680,
+          "entries": [
+            { "range_m": 450, "elevation_mil": 1525, "delev_per_100m": -5, "time_of_flight_s": 23 },
+            { "range_m": 600, "elevation_mil": 1495, "delev_per_100m": -6, "time_of_flight_s": 24 },
+            { "range_m": 800, "elevation_mil": 1450, "delev_per_100m": -7, "time_of_flight_s": 26 },
+            { "range_m": 1000, "elevation_mil": 1400, "delev_per_100m": -8, "time_of_flight_s": 28 },
+            { "range_m": 1200, "elevation_mil": 1350, "delev_per_100m": -9, "time_of_flight_s": 30 },
+            { "range_m": 1400, "elevation_mil": 1300, "delev_per_100m": -10, "time_of_flight_s": 31 },
+            { "range_m": 1600, "elevation_mil": 1240, "delev_per_100m": -11, "time_of_flight_s": 33 },
+            { "range_m": 1800, "elevation_mil": 1180, "delev_per_100m": -12, "time_of_flight_s": 35 },
+            { "range_m": 2000, "elevation_mil": 1115, "delev_per_100m": -13, "time_of_flight_s": 37 },
+            { "range_m": 2200, "elevation_mil": 1045, "delev_per_100m": -14, "time_of_flight_s": 39 },
+            { "range_m": 2400, "elevation_mil": 965, "delev_per_100m": -16, "time_of_flight_s": 41 },
+            { "range_m": 2600, "elevation_mil": 860, "delev_per_100m": -18, "time_of_flight_s": 43 },
+            { "range_m": 2680, "elevation_mil": 800, "delev_per_100m": -20, "time_of_flight_s": 44 }
+          ]
+        },
+        "3": {
+          "charge": 3,
+          "min_range_m": 800,
+          "max_range_m": 4150,
+          "entries": [
+            { "range_m": 800, "elevation_mil": 1520, "delev_per_100m": -4, "time_of_flight_s": 30 },
+            { "range_m": 1000, "elevation_mil": 1485, "delev_per_100m": -5, "time_of_flight_s": 32 },
+            { "range_m": 1300, "elevation_mil": 1435, "delev_per_100m": -6, "time_of_flight_s": 34 },
+            { "range_m": 1600, "elevation_mil": 1380, "delev_per_100m": -7, "time_of_flight_s": 37 },
+            { "range_m": 2000, "elevation_mil": 1305, "delev_per_100m": -8, "time_of_flight_s": 40 },
+            { "range_m": 2400, "elevation_mil": 1225, "delev_per_100m": -9, "time_of_flight_s": 44 },
+            { "range_m": 2800, "elevation_mil": 1140, "delev_per_100m": -10, "time_of_flight_s": 47 },
+            { "range_m": 3200, "elevation_mil": 1045, "delev_per_100m": -12, "time_of_flight_s": 50 },
+            { "range_m": 3600, "elevation_mil": 935, "delev_per_100m": -14, "time_of_flight_s": 53 },
+            { "range_m": 3900, "elevation_mil": 840, "delev_per_100m": -16, "time_of_flight_s": 55 },
+            { "range_m": 4150, "elevation_mil": 800, "delev_per_100m": -18, "time_of_flight_s": 57 }
+          ]
+        },
+        "4": {
+          "charge": 4,
+          "min_range_m": 1200,
+          "max_range_m": 5600,
+          "entries": [
+            { "range_m": 1200, "elevation_mil": 1515, "delev_per_100m": -3, "time_of_flight_s": 38 },
+            { "range_m": 1600, "elevation_mil": 1465, "delev_per_100m": -4, "time_of_flight_s": 41 },
+            { "range_m": 2000, "elevation_mil": 1410, "delev_per_100m": -5, "time_of_flight_s": 45 },
+            { "range_m": 2500, "elevation_mil": 1335, "delev_per_100m": -6, "time_of_flight_s": 49 },
+            { "range_m": 3000, "elevation_mil": 1255, "delev_per_100m": -7, "time_of_flight_s": 54 },
+            { "range_m": 3500, "elevation_mil": 1170, "delev_per_100m": -8, "time_of_flight_s": 58 },
+            { "range_m": 4000, "elevation_mil": 1075, "delev_per_100m": -9, "time_of_flight_s": 62 },
+            { "range_m": 4500, "elevation_mil": 970, "delev_per_100m": -11, "time_of_flight_s": 66 },
+            { "range_m": 5000, "elevation_mil": 850, "delev_per_100m": -13, "time_of_flight_s": 70 },
+            { "range_m": 5300, "elevation_mil": 810, "delev_per_100m": -15, "time_of_flight_s": 73 },
+            { "range_m": 5600, "elevation_mil": 800, "delev_per_100m": -17, "time_of_flight_s": 75 }
+          ]
+        }
+      }
+    },
+    "2B14": {
+      "id": "2B14",
+      "name": "2B14 Podnos 82mm (USSR)",
+      "nameAr": "هاون 2B14 بودنس عيار 82 ملم (السوفييتي)",
+      "faction": "USSR",
+      "caliber": "82mm",
+      "defaultMilSystem": "6000",
+      "charges": {
+        "1": {
+          "charge": 1,
+          "min_range_m": 120,
+          "max_range_m": 1150,
+          "entries": [
+            { "range_m": 120, "elevation_mil": 1420, "delev_per_100m": -11, "time_of_flight_s": 14 },
+            { "range_m": 200, "elevation_mil": 1395, "delev_per_100m": -12, "time_of_flight_s": 16 },
+            { "range_m": 300, "elevation_mil": 1360, "delev_per_100m": -13, "time_of_flight_s": 18 },
+            { "range_m": 400, "elevation_mil": 1320, "delev_per_100m": -14, "time_of_flight_s": 20 },
+            { "range_m": 500, "elevation_mil": 1275, "delev_per_100m": -15, "time_of_flight_s": 21 },
+            { "range_m": 600, "elevation_mil": 1225, "delev_per_100m": -16, "time_of_flight_s": 23 },
+            { "range_m": 700, "elevation_mil": 1170, "delev_per_100m": -17, "time_of_flight_s": 24 },
+            { "range_m": 800, "elevation_mil": 1110, "delev_per_100m": -18, "time_of_flight_s": 25 },
+            { "range_m": 900, "elevation_mil": 1040, "delev_per_100m": -20, "time_of_flight_s": 27 },
+            { "range_m": 1000, "elevation_mil": 955, "delev_per_100m": -22, "time_of_flight_s": 28 },
+            { "range_m": 1100, "elevation_mil": 845, "delev_per_100m": -25, "time_of_flight_s": 29 },
+            { "range_m": 1150, "elevation_mil": 750, "delev_per_100m": -28, "time_of_flight_s": 30 }
+          ]
+        },
+        "2": {
+          "charge": 2,
+          "min_range_m": 350,
+          "max_range_m": 2100,
+          "entries": [
+            { "range_m": 350, "elevation_mil": 1425, "delev_per_100m": -7, "time_of_flight_s": 21 },
+            { "range_m": 500, "elevation_mil": 1390, "delev_per_100m": -8, "time_of_flight_s": 23 },
+            { "range_m": 700, "elevation_mil": 1340, "delev_per_100m": -9, "time_of_flight_s": 25 },
+            { "range_m": 900, "elevation_mil": 1285, "delev_per_100m": -10, "time_of_flight_s": 27 },
+            { "range_m": 1100, "elevation_mil": 1225, "delev_per_100m": -11, "time_of_flight_s": 29 },
+            { "range_m": 1300, "elevation_mil": 1160, "delev_per_100m": -12, "time_of_flight_s": 31 },
+            { "range_m": 1500, "elevation_mil": 1090, "delev_per_100m": -13, "time_of_flight_s": 33 },
+            { "range_m": 1700, "elevation_mil": 1010, "delev_per_100m": -15, "time_of_flight_s": 35 },
+            { "range_m": 1900, "elevation_mil": 915, "delev_per_100m": -17, "time_of_flight_s": 37 },
+            { "range_m": 2100, "elevation_mil": 750, "delev_per_100m": -20, "time_of_flight_s": 39 }
+          ]
+        },
+        "3": {
+          "charge": 3,
+          "min_range_m": 700,
+          "max_range_m": 3200,
+          "entries": [
+            { "range_m": 700, "elevation_mil": 1420, "delev_per_100m": -5, "time_of_flight_s": 28 },
+            { "range_m": 1000, "elevation_mil": 1375, "delev_per_100m": -6, "time_of_flight_s": 31 },
+            { "range_m": 1300, "elevation_mil": 1320, "delev_per_100m": -7, "time_of_flight_s": 34 },
+            { "range_m": 1600, "elevation_mil": 1260, "delev_per_100m": -8, "time_of_flight_s": 37 },
+            { "range_m": 2000, "elevation_mil": 1175, "delev_per_100m": -9, "time_of_flight_s": 41 },
+            { "range_m": 2400, "elevation_mil": 1075, "delev_per_100m": -11, "time_of_flight_s": 45 },
+            { "range_m": 2800, "elevation_mil": 955, "delev_per_100m": -13, "time_of_flight_s": 49 },
+            { "range_m": 3100, "elevation_mil": 820, "delev_per_100m": -16, "time_of_flight_s": 52 },
+            { "range_m": 3200, "elevation_mil": 750, "delev_per_100m": -18, "time_of_flight_s": 54 }
+          ]
+        },
+        "4": {
+          "charge": 4,
+          "min_range_m": 1100,
+          "max_range_m": 4200,
+          "entries": [
+            { "range_m": 1100, "elevation_mil": 1415, "delev_per_100m": -4, "time_of_flight_s": 36 },
+            { "range_m": 1500, "elevation_mil": 1360, "delev_per_100m": -5, "time_of_flight_s": 40 },
+            { "range_m": 2000, "elevation_mil": 1285, "delev_per_100m": -6, "time_of_flight_s": 44 },
+            { "range_m": 2500, "elevation_mil": 1200, "delev_per_100m": -7, "time_of_flight_s": 49 },
+            { "range_m": 3000, "elevation_mil": 1105, "delev_per_100m": -8, "time_of_flight_s": 54 },
+            { "range_m": 3500, "elevation_mil": 990, "delev_per_100m": -10, "time_of_flight_s": 59 },
+            { "range_m": 3900, "elevation_mil": 860, "delev_per_100m": -12, "time_of_flight_s": 63 },
+            { "range_m": 4200, "elevation_mil": 750, "delev_per_100m": -15, "time_of_flight_s": 67 }
+          ]
+        }
+      }
+    }
+  }
+}

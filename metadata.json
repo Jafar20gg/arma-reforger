@@ -1,0 +1,6 @@
+{
+  "name": "Reforger Mortar Map (خريطة هاون ريفورجر)",
+  "description": "Tactical mortar calculator and interactive grid map for Arma Reforger with ballistics tables, RTL Arabic/English UI, and fire adjustment.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

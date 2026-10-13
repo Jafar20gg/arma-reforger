@@ -1,0 +1,38 @@
+# Disabled GitHub Actions workflow template for fetching server status
+# To enable, rename this file to .github/workflows/fetch-server-status.yml
+# and configure repository secrets: STATUS_API_URL and STATUS_API_TOKEN
+
+name: Update Server Status (Disabled Template)
+
+on:
+  # schedule:
+  #   - cron: '*/15 * * * *' # Every 15 minutes
+  workflow_dispatch:
+
+jobs:
+  update-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch Live Status from Custom API
+        env:
+          API_URL: ${{ secrets.STATUS_API_URL }}
+          API_TOKEN: ${{ secrets.STATUS_API_TOKEN }}
+        run: |
+          if [ -z "$API_URL" ]; then
+            echo "STATUS_API_URL secret not set. Skipping status fetch."
+            exit 0
+          fi
+
+          echo "Fetching server status from configured API..."
+          curl -s -H "Authorization: Bearer $API_TOKEN" "$API_URL" -o public/servers-status.json || true
+
+      - name: Commit and Push Status
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/servers-status.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: update servers-status.json [skip ci]"
+          git push || true
