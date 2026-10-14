@@ -53,13 +53,13 @@ export const RECOIL_MAP_PRESETS: Record<TerrainId, RecoilMapPreset> = {
     terrainId: 'arland',
     name: 'Arland',
     nameAr: 'أرلاند',
-    sizeMeters: 5940,
+    sizeMeters: 4000,
     compositeUrl: 'https://reforger.recoil.org/arland_hero_composite.jpg',
     thumbUrl: 'https://reforger.recoil.org/arland_hero_composite_thumb.jpg',
     tileUrlTemplate: 'https://reforger.recoil.org/map-tiles/arland/{z}/{x}/{y}/tile.jpg',
     pageUrl: 'https://reforger.recoil.org/arland/',
-    description: '5.94 × 5.94 km high-resolution composite map (1699px) from recoil.org.',
-    descriptionAr: 'خريطة تضاريس أرلاند 5.94 × 5.94 كم عالية الدقة (1699 بكسل) من recoil.org.',
+    description: '4.0 × 4.0 km high-resolution composite map (1699px) from recoil.org.',
+    descriptionAr: 'خريطة تضاريس أرلاند 4.0 × 4.0 كم عالية الدقة (1699 بكسل) من recoil.org.',
   },
   kolguyev: {
     terrainId: 'kolguyev',
@@ -122,7 +122,7 @@ export function getDefaultBounds(terrain: TerrainId, customSize?: number): [[num
   const size = customSize && customSize > 0
     ? customSize
     : terrain === 'arland'
-    ? 5940
+    ? 4000
     : 12800; // Everon & Kolguyev default to 12800 m
   return [
     [0, 0],

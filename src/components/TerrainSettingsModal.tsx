@@ -128,7 +128,14 @@ export const TerrainSettingsModal: React.FC<TerrainSettingsModalProps> = ({
                 onClick={() => handlePreset(12800)}
                 className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono"
               >
-                12,800m (12.8km - Everon size)
+                12,800m (12.8km - Everon / Kolguyev)
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePreset(4000)}
+                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono"
+              >
+                4,000m (4.0km - Arland)
               </button>
               <button
                 type="button"
@@ -149,7 +156,7 @@ export const TerrainSettingsModal: React.FC<TerrainSettingsModalProps> = ({
                 onClick={() => handlePreset(5940)}
                 className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono"
               >
-                5,940m (5.94km - Arland size)
+                5,940m (5.94km)
               </button>
             </div>
           </div>

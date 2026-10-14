@@ -248,6 +248,7 @@ export default function App() {
   const [isLocationLayersModalOpen, setIsLocationLayersModalOpen] = useState(false);
   const [isEnfusionHelpModalOpen, setIsEnfusionHelpModalOpen] = useState(false);
   const [isMapImageModalOpen, setIsMapImageModalOpen] = useState(false);
+  const [mapImageModalTab, setMapImageModalTab] = useState<'recoil' | 'image' | 'folder' | 'url'>('recoil');
   const [isMapHelpModalOpen, setIsMapHelpModalOpen] = useState(false);
   const [isPoiModalOpen, setIsPoiModalOpen] = useState(false);
   const [prefillPoiCoords, setPrefillPoiCoords] = useState<{ x: number; y: number } | null>(null);
@@ -530,7 +531,10 @@ export default function App() {
           setIsInitialKolguyevPrompt(false);
           setIsTerrainSettingsModalOpen(true);
         }}
-        onOpenMapImageModal={() => setIsMapImageModalOpen(true)}
+        onOpenMapImageModal={() => {
+          setMapImageModalTab('recoil');
+          setIsMapImageModalOpen(true);
+        }}
         onOpenPoiModal={() => {
           setPrefillPoiCoords(null);
           setIsPoiModalOpen(true);
@@ -567,7 +571,14 @@ export default function App() {
             onSelectTarget={setSelectedTargetId}
             onDeleteTarget={handleDeleteTarget}
             onCursorMove={setCursorCoords}
-            onOpenUploadModal={() => setIsMapImageModalOpen(true)}
+            onOpenUploadModal={() => {
+              setMapImageModalTab('image');
+              setIsMapImageModalOpen(true);
+            }}
+            onOpenRecoilMaps={() => {
+              setMapImageModalTab('recoil');
+              setIsMapImageModalOpen(true);
+            }}
             onOpenHelpModal={() => setIsMapHelpModalOpen(true)}
             onAddPlaceAtCoords={handleOpenAddPoiAtCoords}
             mapInstanceRef={mapInstanceRef}
@@ -682,6 +693,8 @@ export default function App() {
         language={language}
         imageConfig={terrainImageConfig}
         onImageConfigChanged={setTerrainImageConfig}
+        onSelectTerrain={setTerrainId}
+        initialTab={mapImageModalTab}
         onOpenHelp={() => {
           setIsMapImageModalOpen(false);
           setIsMapHelpModalOpen(true);

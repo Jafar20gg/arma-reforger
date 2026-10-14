@@ -7,6 +7,8 @@ import {
   storeTileFolder,
   computeCalibrationBounds,
   getDefaultBounds,
+  RECOIL_MAP_PRESETS,
+  RecoilMapPreset,
 } from '../utils/imageStore';
 import { parseGridReference } from '../utils/coordinates';
 import { translations } from '../i18n/translations';
@@ -24,6 +26,10 @@ import {
   Crosshair,
   FolderOpen,
   Layers,
+  Globe,
+  Sparkles,
+  ExternalLink,
+  Download,
 } from 'lucide-react';
 
 interface MapImageCalibrationModalProps {
@@ -35,6 +41,8 @@ interface MapImageCalibrationModalProps {
   onImageConfigChanged: (config: TerrainImageConfig | null) => void;
   onOpenHelp: () => void;
   onOpenEnfusionHelp?: () => void;
+  onSelectTerrain?: (t: TerrainId) => void;
+  initialTab?: 'recoil' | 'image' | 'folder' | 'url';
 }
 
 export const MapImageCalibrationModal: React.FC<MapImageCalibrationModalProps> = ({
@@ -46,10 +54,12 @@ export const MapImageCalibrationModal: React.FC<MapImageCalibrationModalProps> =
   onImageConfigChanged,
   onOpenHelp,
   onOpenEnfusionHelp,
+  onSelectTerrain,
+  initialTab = 'recoil',
 }) => {
   const t = translations[language];
 
-  const [activeTab, setActiveTab] = useState<'image' | 'folder' | 'url'>('image');
+  const [activeTab, setActiveTab] = useState<'recoil' | 'image' | 'folder' | 'url'>(initialTab);
   const [opacity, setOpacity] = useState<number>(imageConfig?.opacity ?? 0.85);
   const [tileUrl, setTileUrl] = useState<string>(imageConfig?.tileUrlTemplate ?? '');
   const [isCalibrating, setIsCalibrating] = useState<boolean>(false);
@@ -71,6 +81,68 @@ export const MapImageCalibrationModal: React.FC<MapImageCalibrationModalProps> =
   const showToast = (msg: string) => {
     setStatusMsg(msg);
     setTimeout(() => setStatusMsg(null), 2500);
+  };
+
+  const handleApplyRecoilComposite = async (targetTerrain: TerrainId = terrain) => {
+    const preset = RECOIL_MAP_PRESETS[targetTerrain];
+    if (!preset) return;
+    try {
+      const bounds = getDefaultBounds(targetTerrain, preset.sizeMeters);
+      const savedConfig = await saveTerrainImage(targetTerrain, null, {
+        imageUrl: preset.compositeUrl,
+        externalImageUrl: preset.compositeUrl,
+        opacity,
+        tileSourceType: 'image',
+        tileUrlTemplate: '',
+        bounds,
+        isCalibrated: true,
+      });
+      if (targetTerrain === terrain) {
+        onImageConfigChanged(savedConfig);
+      } else if (onSelectTerrain) {
+        onSelectTerrain(targetTerrain);
+        onImageConfigChanged(savedConfig);
+      }
+      showToast(
+        language === 'ar'
+          ? `تم تطبيق خريطة ${preset.nameAr} المجمعة من recoil.org بنجاح!`
+          : `${preset.name} composite map applied from recoil.org!`
+      );
+    } catch (err) {
+      alert('فشل في حفظ مصدر الخريطة.');
+      console.error(err);
+    }
+  };
+
+  const handleApplyRecoilTiles = async (targetTerrain: TerrainId = terrain) => {
+    const preset = RECOIL_MAP_PRESETS[targetTerrain];
+    if (!preset) return;
+    try {
+      const bounds = getDefaultBounds(targetTerrain, preset.sizeMeters);
+      const savedConfig = await saveTerrainImage(targetTerrain, null, {
+        imageUrl: null,
+        externalImageUrl: undefined,
+        opacity,
+        tileSourceType: 'recoil',
+        tileUrlTemplate: preset.tileUrlTemplate,
+        bounds,
+        isCalibrated: true,
+      });
+      if (targetTerrain === terrain) {
+        onImageConfigChanged(savedConfig);
+      } else if (onSelectTerrain) {
+        onSelectTerrain(targetTerrain);
+        onImageConfigChanged(savedConfig);
+      }
+      showToast(
+        language === 'ar'
+          ? `تم تفعيل خادم بلاطات ${preset.nameAr} من recoil.org!`
+          : `${preset.name} live tile layer from recoil.org activated!`
+      );
+    } catch (err) {
+      alert('فشل في تفعيل خادم البلاطات.');
+      console.error(err);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -252,6 +324,16 @@ export const MapImageCalibrationModal: React.FC<MapImageCalibrationModalProps> =
           <div className="flex rounded-xl bg-slate-950 border border-slate-800 p-1 gap-1">
             <button
               type="button"
+              onClick={() => setActiveTab('recoil')}
+              className={`flex-1 py-1.5 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
+                activeTab === 'recoil' ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>{language === 'ar' ? 'خرائط Recoil.org' : 'Recoil.org'}</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveTab('image')}
               className={`flex-1 py-1.5 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
                 activeTab === 'image' ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'
@@ -281,6 +363,201 @@ export const MapImageCalibrationModal: React.FC<MapImageCalibrationModalProps> =
               <span>{language === 'ar' ? 'رابط ويب' : 'Tile URL'}</span>
             </button>
           </div>
+
+          {/* TAB 0: Recoil.org Maps (Everon, Arland, Kolguyev) */}
+          {activeTab === 'recoil' && (
+            <div className="space-y-4">
+              {/* Attribution Banner */}
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-amber-400 font-bold text-xs">
+                    <Globe className="w-4 h-4" />
+                    <span>{language === 'ar' ? 'خرائط مشروع reforger.recoil.org' : 'reforger.recoil.org Project Maps'}</span>
+                  </div>
+                  <a
+                    href="https://reforger.recoil.org/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1"
+                  >
+                    <span>reforger.recoil.org</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  {language === 'ar'
+                    ? 'خرائط عالية الدقة أُنشئت بواسطة Nick Ludlam عبر EnfusionMapMaker. يمكنك تطبيق الخريطة المجمعة الكاملة (Composite Map) فائقة الوضوح، أو تفعيل خادم البلاطات التفاعلي المباشر.'
+                    : 'High-resolution maps created by Nick Ludlam using EnfusionMapMaker. You can load full composite maps or stream live interactive tiles.'}
+                </p>
+              </div>
+
+              {/* Current Terrain Preset Highlight Card */}
+              {(() => {
+                const currentPreset = RECOIL_MAP_PRESETS[terrain];
+                if (!currentPreset) return null;
+                const isCurrentActive =
+                  imageConfig?.tileSourceType === 'recoil' ||
+                  imageConfig?.imageUrl === currentPreset.compositeUrl ||
+                  imageConfig?.externalImageUrl === currentPreset.compositeUrl;
+
+                return (
+                  <div className="p-3.5 rounded-xl bg-slate-950 border-2 border-cyan-500/50 space-y-3 shadow-lg">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-100 text-sm">
+                            {language === 'ar' ? currentPreset.nameAr : currentPreset.name}
+                          </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800">
+                            {currentPreset.sizeMeters >= 1000
+                              ? `${currentPreset.sizeMeters / 1000} × ${currentPreset.sizeMeters / 1000} km`
+                              : `${currentPreset.sizeMeters} m`}
+                          </span>
+                          {isCurrentActive && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1">
+                              <Check className="w-3 h-3" />
+                              <span>{language === 'ar' ? 'الخريطة النشطة' : 'Active'}</span>
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          {language === 'ar' ? currentPreset.descriptionAr : currentPreset.description}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Preview Thumbnail */}
+                    <div className="w-full h-28 rounded-lg overflow-hidden relative border border-slate-800 bg-slate-900 group">
+                      <img
+                        src={currentPreset.thumbUrl}
+                        alt={currentPreset.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                        loading="lazy"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = currentPreset.compositeUrl;
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent flex items-end p-2.5">
+                        <span className="text-[10px] font-mono text-cyan-300 font-semibold bg-slate-950/80 px-2 py-0.5 rounded">
+                          {terrain === 'kolguyev' ? '4200 × 4200 px' : terrain === 'everon' ? '2159 × 2158 px' : '1699 × 1489 px'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleApplyRecoilComposite(terrain)}
+                        className="py-2 px-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow transition"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>{language === 'ar' ? 'تطبيق الخريطة المجمعة الكاملة' : 'Load Composite Map'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleApplyRecoilTiles(terrain)}
+                        className="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition"
+                      >
+                        <Layers className="w-3.5 h-3.5" />
+                        <span>{language === 'ar' ? 'تفعيل خادم البلاطات المباشر' : 'Stream Live Tiles'}</span>
+                      </button>
+                    </div>
+
+                    {/* Direct Links */}
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/80">
+                      <a
+                        href={currentPreset.compositeUrl}
+                        download={`${terrain}_composite.jpg`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-cyan-300 flex items-center gap-1 font-mono transition"
+                      >
+                        <Download className="w-3 h-3" />
+                        <span>{language === 'ar' ? 'تحميل صورة JPG الأصلية للقرص' : 'Download Full JPG'}</span>
+                      </a>
+                      <a
+                        href={currentPreset.pageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-cyan-300 flex items-center gap-1 transition"
+                      >
+                        <span>{language === 'ar' ? 'عرض على recoil.org' : 'View on recoil.org'}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Other Recoil Maps List */}
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-slate-300 block">
+                  {language === 'ar' ? 'جميع خرائط Recoil.org المتاحة:' : 'All Available Recoil.org Maps:'}
+                </span>
+
+                <div className="grid grid-cols-1 gap-2">
+                  {(Object.keys(RECOIL_MAP_PRESETS) as TerrainId[]).map((tId) => {
+                    const preset = RECOIL_MAP_PRESETS[tId];
+                    const isSelected = terrain === tId;
+
+                    return (
+                      <div
+                        key={tId}
+                        className={`p-2.5 rounded-xl border flex items-center justify-between gap-3 transition ${
+                          isSelected
+                            ? 'bg-slate-900 border-cyan-800/80'
+                            : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <img
+                            src={preset.thumbUrl}
+                            alt={preset.name}
+                            className="w-10 h-10 rounded-lg object-cover border border-slate-800 shrink-0"
+                            loading="lazy"
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-xs text-slate-200">
+                                {language === 'ar' ? preset.nameAr : preset.name}
+                              </span>
+                              <span className="text-[10px] font-mono text-slate-400">
+                                {preset.sizeMeters / 1000} km
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 truncate max-w-[200px] sm:max-w-[280px]">
+                              {language === 'ar' ? preset.descriptionAr : preset.description}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleApplyRecoilComposite(tId)}
+                            className="px-2.5 py-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-800 text-cyan-300 font-bold text-[11px] transition"
+                            title={language === 'ar' ? 'تطبيق الخريطة المجمعة' : 'Apply Composite'}
+                          >
+                            {language === 'ar' ? 'خريطة كاملة' : 'Composite'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApplyRecoilTiles(tId)}
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-[11px] transition"
+                            title={language === 'ar' ? 'تفعيل البلاطات' : 'Apply Tiles'}
+                          >
+                            {language === 'ar' ? 'بلاطات' : 'Tiles'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* TAB 1: Single Screenshot Image */}
           {activeTab === 'image' && (

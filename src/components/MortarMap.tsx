@@ -24,6 +24,7 @@ import {
   Compass,
   AlertCircle,
   Globe,
+  Sparkles,
 } from 'lucide-react';
 
 interface MortarMapProps {
@@ -831,20 +832,32 @@ export const MortarMap: React.FC<MortarMapProps> = ({
 
       {/* Banner when no image is loaded */}
       {!terrainImageConfig?.imageUrl && !terrainImageConfig?.tileUrlTemplate && (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 max-w-lg w-[92%] bg-slate-950/90 border border-amber-500/40 rounded-xl p-2.5 sm:p-3 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-200">
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 max-w-xl w-[94%] bg-slate-950/95 border border-cyan-500/40 rounded-xl p-2.5 sm:p-3 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-200">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2 text-amber-300 text-xs">
-              <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
-              <span>{t.noMapImageBanner}</span>
+            <div className="flex items-center gap-2 text-cyan-300 text-xs">
+              <Sparkles className="w-4 h-4 shrink-0 text-amber-400" />
+              <span>
+                {language === 'ar'
+                  ? `أضف خريطة ${terrain.nameAr || terrain.name} من reforger.recoil.org مباشرة أو ارفع صورة خاصة:`
+                  : `Load ${terrain.name} map directly from reforger.recoil.org or upload custom image:`}
+              </span>
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
               <button
+                onClick={onOpenRecoilMaps || onOpenUploadModal}
+                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 transition shadow"
+              >
+                <Globe className="w-3.5 h-3.5" />
+                <span>{language === 'ar' ? 'خرائط Recoil.org' : 'Recoil.org Maps'}</span>
+              </button>
+
+              <button
                 onClick={onOpenUploadModal}
-                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1 transition shadow"
+                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 transition"
               >
                 <ImageIcon className="w-3.5 h-3.5" />
-                <span>{t.uploadMapImage}</span>
+                <span>{language === 'ar' ? 'رفع صورة' : 'Upload'}</span>
               </button>
 
               <button

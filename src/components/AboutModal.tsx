@@ -72,16 +72,27 @@ export const AboutModal: React.FC<AboutModalProps> = ({ isOpen, onClose, languag
             </p>
           </div>
 
-          {/* EnfusionMapMaker & Community Credits */}
+          {/* EnfusionMapMaker & Recoil.org Credits */}
           <div className="space-y-2 bg-slate-950/50 p-3.5 rounded-xl border border-cyan-800/40">
-            <h4 className="font-bold text-cyan-300 flex items-center gap-2">
-              <Code2 className="w-4 h-4 text-cyan-400" />
-              <span>EnfusionMapMaker & Community Credits</span>
+            <h4 className="font-bold text-cyan-300 flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Code2 className="w-4 h-4 text-cyan-400" />
+                <span>EnfusionMapMaker & reforger.recoil.org</span>
+              </span>
+              <a
+                href="https://reforger.recoil.org/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1 font-normal"
+              >
+                <span>recoil.org</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
             </h4>
             <p className="text-slate-300 text-[11px] leading-relaxed">
               {language === 'ar'
-                ? 'تقدير وشكر خاص لأداة EnfusionMapMaker ومطورها من مجتمع Arma Reforger على إتاحة تصدير وتقطيع بلاطات الخرائط بدقة عالية. ترخيص الأداة: Arma Public License Share Alike (APL-SA).'
-                : 'Special credits to the open community tool EnfusionMapMaker and its author for providing the high-resolution Slippy map tile generator for Arma Reforger. Licensed under the Arma Public License Share Alike (APL-SA).'}
+                ? 'تقدير وشكر خاص للمطور Nick Ludlam ومشروع reforger.recoil.org وأداة EnfusionMapMaker على إتاحة الخرائط المجمعة والبلاطات التفاعلية عالية الدقة لمجتمع Arma Reforger. ترخيص الأداة: Arma Public License Share Alike (APL-SA).'
+                : 'Special thanks to Nick Ludlam, creator of reforger.recoil.org and EnfusionMapMaker, for providing high-resolution composite maps and interactive tile layers for the Arma Reforger community (APL-SA license).'}
             </p>
             <div className="p-2 rounded bg-slate-900 border border-slate-800 text-[11px] text-amber-300/90 leading-relaxed font-mono">
               {language === 'ar'

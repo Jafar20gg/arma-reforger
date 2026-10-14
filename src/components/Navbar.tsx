@@ -270,13 +270,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <div className="h-4 w-[1px] bg-slate-800 shrink-0"></div>
 
-        {/* Map Image Button */}
+        {/* Map Image & Recoil Button */}
         <button
           onClick={onOpenMapImageModal}
           className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-medium text-cyan-300 hover:text-white flex items-center gap-1.5 transition shrink-0"
         >
           <ImageIcon className="w-3.5 h-3.5 text-cyan-400" />
-          <span>{t.uploadMapImage}</span>
+          <span>{language === 'ar' ? 'الخريطة وRecoil' : 'Map & Recoil'}</span>
         </button>
 
         {/* Places / POIs Button */}
