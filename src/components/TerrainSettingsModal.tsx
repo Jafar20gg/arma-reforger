@@ -1,7 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TerrainId, TerrainConfig, Language } from '../types';
 import { translations } from '../i18n/translations';
-import { Settings, X, Check, MapPin, Maximize2, RotateCcw } from 'lucide-react';
+import { Settings, X, Check, Maximize2, ExternalLink, RotateCcw, Link2 } from 'lucide-react';
+import {
+  getTacOpsSettings,
+  saveTacOpsSettings,
+  resetTacOpsSettings,
+  buildTacOpsUrl,
+  DEFAULT_TACOPS_BASE,
+  DEFAULT_TACOPS_PARAMS,
+} from '../utils/externalMaps';
 
 interface TerrainSettingsModalProps {
   isOpen: boolean;
@@ -29,6 +37,19 @@ export const TerrainSettingsModal: React.FC<TerrainSettingsModalProps> = ({
     currentConfig.sizeMeters > 0 ? currentConfig.sizeMeters : 12800
   );
 
+  // TacOps editable link template & parameter template
+  const [tacopsBase, setTacopsBase] = useState<string>(DEFAULT_TACOPS_BASE);
+  const [tacopsParams, setTacopsParams] = useState<string>(DEFAULT_TACOPS_PARAMS);
+
+  useEffect(() => {
+    if (isOpen) {
+      setInputSize(currentConfig.sizeMeters > 0 ? currentConfig.sizeMeters : 12800);
+      const settings = getTacOpsSettings();
+      setTacopsBase(settings.baseTemplate);
+      setTacopsParams(settings.paramTemplate);
+    }
+  }, [isOpen, currentConfig.sizeMeters]);
+
   if (!isOpen) return null;
 
   const handleSave = (e: React.FormEvent) => {
@@ -37,7 +58,15 @@ export const TerrainSettingsModal: React.FC<TerrainSettingsModalProps> = ({
       alert('يرجى إدخال حجم صالح للخريطة بالمتر (أكبر من 0).');
       return;
     }
+    // Save terrain size
     onSaveTerrainSize(terrainId, inputSize);
+
+    // Save TacOps settings
+    saveTacOpsSettings({
+      baseTemplate: tacopsBase,
+      paramTemplate: tacopsParams,
+    });
+
     onClose();
   };
 
@@ -45,9 +74,35 @@ export const TerrainSettingsModal: React.FC<TerrainSettingsModalProps> = ({
     setInputSize(size);
   };
 
+  const handleTestTacOps = () => {
+    // Generate test URL using current field values
+    let url = tacopsBase.replace(/{terrain}/g, terrainId.toLowerCase());
+    if (tacopsParams) {
+      const p = tacopsParams
+        .replace(/{terrain}/g, terrainId.toLowerCase())
+        .replace(/{zoom}/g, '3')
+        .replace(/{x}/g, String(Math.round(inputSize / 2)))
+        .replace(/{y}/g, String(Math.round(inputSize / 2)));
+      if (!url.includes('?') && p.startsWith('?')) {
+        url += p;
+      } else if (url.includes('?') && p.startsWith('?')) {
+        url += '&' + p.substring(1);
+      } else {
+        url += p;
+      }
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleResetTacOps = () => {
+    const res = resetTacOpsSettings();
+    setTacopsBase(res.baseTemplate);
+    setTacopsParams(res.paramTemplate);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-5 py-4 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -59,8 +114,8 @@ export const TerrainSettingsModal: React.FC<TerrainSettingsModalProps> = ({
                     ? 'إعداد أبعاد خريطة كولغوييف'
                     : 'Configure Kolguyev Map Dimensions'
                   : language === 'ar'
-                  ? 'أبعاد التضاريس'
-                  : 'Terrain Dimensions'}
+                  ? 'أبعاد التضاريس وإعدادات الخرائط'
+                  : 'Terrain Dimensions & Map Settings'}
               </h3>
               <p className="text-xs text-slate-400 capitalize">
                 {currentConfig.name}
@@ -78,7 +133,7 @@ export const TerrainSettingsModal: React.FC<TerrainSettingsModalProps> = ({
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSave} className="p-5 space-y-4 text-xs">
+        <form onSubmit={handleSave} className="p-5 space-y-4 text-xs overflow-y-auto">
           {isInitialKolguyevPrompt ? (
             <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 leading-relaxed">
               {language === 'ar'
@@ -88,8 +143,8 @@ export const TerrainSettingsModal: React.FC<TerrainSettingsModalProps> = ({
           ) : (
             <p className="text-slate-300 leading-relaxed">
               {language === 'ar'
-                ? 'يمكنك تعديل أبعاد الخريطة في المتر لتطابق مود التضاريس الخاص بك:'
-                : 'Customize the map world size in meters to match your custom or modded terrain:'}
+                ? 'يمكنك تعديل أبعاد الخريطة بالمتر لتطابق مود التضاريس الخاص بك (إيفرون 12,800م، كولغوييف 12,800م، أرلاند 4,000م):'
+                : 'Customize the map world size in meters (Everon 12,800m, Kolguyev 12,800m, Arland 4,000m):'}
             </p>
           )}
 
@@ -128,35 +183,94 @@ export const TerrainSettingsModal: React.FC<TerrainSettingsModalProps> = ({
                 onClick={() => handlePreset(12800)}
                 className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono"
               >
-                12,800m (12.8km - Everon / Kolguyev)
+                12,800m (Everon / Kolguyev)
               </button>
               <button
                 type="button"
                 onClick={() => handlePreset(4000)}
                 className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono"
               >
-                4,000m (4.0km - Arland)
+                4,000m (Arland)
               </button>
               <button
                 type="button"
                 onClick={() => handlePreset(10240)}
                 className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono"
               >
-                10,240m (10.2km)
+                10,240m
               </button>
               <button
                 type="button"
                 onClick={() => handlePreset(8192)}
                 className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono"
               >
-                8,192m (8.2km)
+                8,192m
               </button>
+            </div>
+          </div>
+
+          {/* Section: TacOps Link Template Configuration */}
+          <div className="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-3 pt-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-emerald-400" />
+                <span className="font-bold text-slate-200 text-xs">
+                  {language === 'ar' ? 'قالب رابط أداة TacOps التفاعلية' : 'TacOps Interactive Link Template'}
+                </span>
+              </div>
               <button
                 type="button"
-                onClick={() => handlePreset(5940)}
-                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-mono"
+                onClick={handleResetTacOps}
+                className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1"
+                title="Reset to default"
               >
-                5,940m (5.94km)
+                <RotateCcw className="w-3 h-3" />
+                <span>{language === 'ar' ? 'استعادة' : 'Reset'}</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              {language === 'ar'
+                ? 'يمكنك تعديل قالب الرابط والمعاملات التجريبية (مثل ?v={zoom}/{x}/{y}) وتجربتها لأن دلالة معاملات TacOps غير موثقة رسمياً.'
+                : 'Configure the link template and test parameter string (?v={zoom}/{x}/{y}) for TacOps external map.'}
+            </p>
+
+            <div>
+              <label className="text-[11px] text-slate-300 font-semibold block mb-1">
+                {language === 'ar' ? 'قالب الرابط الأساسي (Base Template):' : 'Base URL Template:'}
+              </label>
+              <input
+                type="text"
+                value={tacopsBase}
+                onChange={(e) => setTacopsBase(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-500"
+                dir="ltr"
+                placeholder="https://app.tacops.gg/m/{terrain}"
+              />
+            </div>
+
+            <div>
+              <label className="text-[11px] text-slate-300 font-semibold block mb-1">
+                {language === 'ar' ? 'قالب المعاملات (Parameter Template):' : 'Parameter Template:'}
+              </label>
+              <input
+                type="text"
+                value={tacopsParams}
+                onChange={(e) => setTacopsParams(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-cyan-300 focus:outline-none focus:border-cyan-500"
+                dir="ltr"
+                placeholder="?v={zoom}/{x}/{y}"
+              />
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={handleTestTacOps}
+                className="px-3 py-1.5 rounded-lg bg-emerald-950 border border-emerald-500/40 hover:bg-emerald-900 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>{language === 'ar' ? 'اختبار الرابط' : 'Test TacOps Link'}</span>
               </button>
             </div>
           </div>

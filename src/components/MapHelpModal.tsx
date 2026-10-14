@@ -1,7 +1,7 @@
 import React from 'react';
 import { Language } from '../types';
 import { translations } from '../i18n/translations';
-import { HelpCircle, X, Camera, Scissors, Upload, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { HelpCircle, X, Camera, Upload, ShieldCheck, CheckCircle2, Crosshair, ExternalLink } from 'lucide-react';
 
 interface MapHelpModalProps {
   isOpen: boolean;
@@ -34,65 +34,68 @@ export const MapHelpModal: React.FC<MapHelpModalProps> = ({ isOpen, onClose, lan
         {/* Steps Content */}
         <div className="p-5 space-y-4 overflow-y-auto max-h-[80vh] text-xs leading-relaxed text-slate-300">
           <div className="space-y-3">
+            {/* Step 1 */}
             <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
               <div className="w-7 h-7 rounded-full bg-cyan-950 border border-cyan-500/50 flex items-center justify-center text-cyan-400 font-bold shrink-0">
                 1
               </div>
               <div>
                 <h4 className="font-bold text-slate-200 text-xs mb-1">
-                  {language === 'ar' ? 'التقاط لقطات الشاشة داخل اللعبة' : 'Take In-Game Screenshots'}
+                  {language === 'ar' ? 'تنزيل أو التقاط صورة الخريطة' : 'Download or Screenshot Terrain Map'}
                 </h4>
                 <p className="text-slate-400">
                   {language === 'ar'
-                    ? 'افتح خريطة اللعبة بالضغط على الزر (M)، وقرب بالزووم إلى المستوى المطلوب لتظهر تفاصيل التضاريس والخطوط الكنتورية بوضوح، ثم التقط صورة أو عدة لقطات للمنطقة.'
-                    : 'Open the in-game map by pressing (M). Zoom to your desired resolution to capture topographic contours clearly, then take screenshots.'}
+                    ? 'التقط لقطة شاشة عالية الدقة من خريطة اللعبة داخل Arma Reforger بالضغط على مفتاح (M)، أو قم بتنزيل صورة الخريطة يدوياً من المواقع المرجعية مثل reforger.recoil.org لاستخدامك الشخصي.'
+                    : 'Take a clear in-game screenshot from Arma Reforger by pressing (M), or download the map image manually from reference sites like reforger.recoil.org for your personal use.'}
                 </p>
               </div>
             </div>
 
+            {/* Step 2 */}
             <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
               <div className="w-7 h-7 rounded-full bg-cyan-950 border border-cyan-500/50 flex items-center justify-center text-cyan-400 font-bold shrink-0">
                 2
               </div>
               <div>
                 <h4 className="font-bold text-slate-200 text-xs mb-1">
-                  {language === 'ar' ? 'تجميع وقص الصورة (Stitch & Crop)' : 'Stitch and Crop to Bounds'}
+                  {language === 'ar' ? 'رفع الصورة عبر زر "رفع صورة الخريطة"' : 'Upload via "Upload Map" Button'}
                 </h4>
                 <p className="text-slate-400">
                   {language === 'ar'
-                    ? 'قم بدمج اللقطات (إذا كانت متعددة) وقص الصورة بدقة عند حدود الجزيرة أو شبكة إحداثيات معروفة، وتصديرها بصيغة PNG أو JPG أو WebP.'
-                    : 'Stitch multiple screenshots if needed and crop to the terrain bounds or known grid coordinates, then export as PNG, JPG, or WebP.'}
+                    ? 'في التطبيق، اضغط على زر "رفع صورة الخريطة" واختر ملف الصورة (PNG أو JPG أو WebP). يقوم التطبيق تلقائياً بقراءة أبعاد الصورة وتحسينها للعرض فائق السرعة مع الحفاظ على الأصل.'
+                    : 'Click "Upload Map" and select your image file (PNG, JPG, or WebP). The app handles large images smoothly by generating an optimized display view while keeping the original.'}
                 </p>
               </div>
             </div>
 
+            {/* Step 3 */}
             <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
               <div className="w-7 h-7 rounded-full bg-cyan-950 border border-cyan-500/50 flex items-center justify-center text-cyan-400 font-bold shrink-0">
                 3
               </div>
               <div>
                 <h4 className="font-bold text-slate-200 text-xs mb-1">
-                  {language === 'ar' ? 'الرفع والمعايرة بنقرتين' : 'Upload and Calibrate'}
+                  {language === 'ar' ? 'اختيار "تغطي الخريطة كاملة" أو "معايرة بنقطتين"' : 'Choose "Full Terrain" or "Two-Point Calibration"'}
                 </h4>
                 <p className="text-slate-400">
                   {language === 'ar'
-                    ? 'انقر على "رفع صورة الخريطة". إذا كانت صورتك مقصوصة جزئياً، استخدم أداة "معايرة أبعاد الصورة" وحدد نقطتين معلومتين لتطابقها بدقة السنتيمتر.'
-                    : 'Click "Upload Map Image". If your image is cropped to a partial sector, use the calibration tool to bind two reference points to game coordinates.'}
+                    ? 'إذا كانت الصورة مربعة وتغطي الجزيرة كاملة، اختر خيار "تغطي الخريطة كاملة". أما إذا كانت الصورة لقطة شاشة مقصوصة جزئياً أو غير مربعة، اختر "معايرة بنقطتين" وانقر على نقطتين معروفتين في الصورة وأدخل إحداثياتهما ليتم حساب المقياس والإزاحة بدقة متناهية.'
+                    : 'If the image covers the entire island from edge to edge, select "Full Terrain Bounds". If it is a partial or cropped screenshot, choose "Two-Point Calibration" and tap two reference landmarks to calculate exact scale and offset.'}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Legal / Personal Use Notice */}
-          <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-600/40 text-amber-200 text-[11px] space-y-1">
-            <div className="font-bold text-amber-300 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-amber-400" />
-              <span>{language === 'ar' ? 'تنويه قانوني وترخيص الأصول' : 'Legal & Personal Use Notice'}</span>
+          {/* Device Local Storage & Privacy Notice */}
+          <div className="p-3.5 rounded-xl bg-emerald-950/30 border border-emerald-600/40 text-emerald-200 text-[11px] space-y-1.5">
+            <div className="font-bold text-emerald-300 flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>{language === 'ar' ? 'استخدام شخصي محلي 100%' : '100% Local & Personal Use'}</span>
             </div>
-            <p>
+            <p className="leading-relaxed">
               {language === 'ar'
-                ? 'لقطات شاشة اللعبة مخصصة لاستخدامك الشخصي فقط داخل متصفحك. تُحفظ الصور محلياً في ذاكرة جهازك (IndexedDB) ولا يتم رفعها أو تخزينها على أي خادم عام. جميع حقوق الأصول والرسومات والصور تعود لشركة Bohemia Interactive a.s.'
-                : 'Screenshots are strictly for your personal, local use. Images are saved exclusively on your device (IndexedDB) and are never uploaded or committed to any repository. Game visual assets remain the property of Bohemia Interactive a.s.'}
+                ? 'تنبيه: صور الخرائط والشرائح مخصصة للاستخدام الشخصي على جهازك فقط. تُخزن الصور داخل متصفحك محلياً (IndexedDB)، ولا يتم رفعها إلى أي خادم، ولا يتم عمل Commit لها في المستودع إطلاقاً.'
+                : 'Notice: Map images are strictly for personal use on your device. All files are stored locally in IndexedDB, never uploaded to any remote server, and never committed to any repository.'}
             </p>
           </div>
         </div>
@@ -101,7 +104,7 @@ export const MapHelpModal: React.FC<MapHelpModalProps> = ({ isOpen, onClose, lan
         <div className="px-5 py-3 bg-slate-950 border-t border-slate-800 flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition"
+            className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition shadow"
           >
             {t.close}
           </button>

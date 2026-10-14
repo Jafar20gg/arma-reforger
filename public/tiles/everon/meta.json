@@ -1,0 +1,10 @@
+{
+  "terrain": "everon",
+  "sizeMeters": 12800,
+  "tileSize": 256,
+  "minZoom": 0,
+  "maxZoom": 6,
+  "format": "png",
+  "yOrder": "xyz",
+  "attribution": "Map tiles generated with EnfusionMapMaker (APL-SA)"
+}

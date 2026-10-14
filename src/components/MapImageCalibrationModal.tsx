@@ -1,4 +1,9 @@
-import React, { useState } from 'react';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useRef, useEffect } from 'react';
 import { TerrainId, Language } from '../types';
 import {
   TerrainImageConfig,
@@ -7,29 +12,32 @@ import {
   storeTileFolder,
   computeCalibrationBounds,
   getDefaultBounds,
-  RECOIL_MAP_PRESETS,
-  RecoilMapPreset,
+  processLocalImageFile,
+  RECOIL_TERRAIN_INFO,
+  CalibrationPoint,
 } from '../utils/imageStore';
-import { parseGridReference } from '../utils/coordinates';
+import { parseGridReference, formatCoordinates } from '../utils/coordinates';
+import { mapLogger } from '../utils/mapLogger';
 import { translations } from '../i18n/translations';
 import {
   Image as ImageIcon,
   Upload,
-  Trash2,
-  Sliders,
-  Check,
-  X,
-  RotateCcw,
-  HelpCircle,
-  Link,
-  ShieldCheck,
-  Crosshair,
   FolderOpen,
-  Layers,
-  Globe,
-  Sparkles,
+  Link,
+  Trash2,
+  Check,
+  AlertTriangle,
+  HelpCircle,
+  X,
   ExternalLink,
-  Download,
+  ShieldCheck,
+  RotateCw,
+  Crosshair,
+  Sliders,
+  Sparkles,
+  Info,
+  Maximize2,
+  RefreshCw,
 } from 'lucide-react';
 
 interface MapImageCalibrationModalProps {
@@ -39,10 +47,11 @@ interface MapImageCalibrationModalProps {
   language: Language;
   imageConfig: TerrainImageConfig | null;
   onImageConfigChanged: (config: TerrainImageConfig | null) => void;
+  onSelectTerrain?: (t: TerrainId) => void;
+  initialTab?: 'image' | 'folder' | 'url';
   onOpenHelp: () => void;
   onOpenEnfusionHelp?: () => void;
-  onSelectTerrain?: (t: TerrainId) => void;
-  initialTab?: 'recoil' | 'image' | 'folder' | 'url';
+  onOpenDiagnostics?: () => void;
 }
 
 export const MapImageCalibrationModal: React.FC<MapImageCalibrationModalProps> = ({
@@ -52,157 +61,248 @@ export const MapImageCalibrationModal: React.FC<MapImageCalibrationModalProps> =
   language,
   imageConfig,
   onImageConfigChanged,
+  onSelectTerrain,
+  initialTab = 'image',
   onOpenHelp,
   onOpenEnfusionHelp,
-  onSelectTerrain,
-  initialTab = 'recoil',
+  onOpenDiagnostics,
 }) => {
   const t = translations[language];
 
-  const [activeTab, setActiveTab] = useState<'recoil' | 'image' | 'folder' | 'url'>(initialTab);
+  // Active Source Tab: 'image' (Local file), 'folder' (EnfusionMapMaker), 'url' (Advanced custom URL)
+  const [activeTab, setActiveTab] = useState<'image' | 'folder' | 'url'>(initialTab);
+
+  // Calibration and settings state
   const [opacity, setOpacity] = useState<number>(imageConfig?.opacity ?? 0.85);
+  const [flipY, setFlipY] = useState<boolean>(imageConfig?.flipY ?? false);
   const [tileUrl, setTileUrl] = useState<string>(imageConfig?.tileUrlTemplate ?? '');
-  const [isCalibrating, setIsCalibrating] = useState<boolean>(false);
-  const [isUploadingFolder, setIsUploadingFolder] = useState<boolean>(false);
-
-  // 2-point calibration inputs
-  const [p1U, setP1U] = useState<number>(0.1);
-  const [p1V, setP1V] = useState<number>(0.1);
-  const [p1CoordInput, setP1CoordInput] = useState<string>('010 110');
-
-  const [p2U, setP2U] = useState<number>(0.9);
-  const [p2V, setP2V] = useState<number>(0.9);
-  const [p2CoordInput, setP2CoordInput] = useState<string>('110 010');
-
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Image Uploading / Processing state
+  const [isProcessingImage, setIsProcessingImage] = useState(false);
+  const [processProgress, setProcessProgress] = useState<string | null>(null);
+  const [isUploadingFolder, setIsUploadingFolder] = useState(false);
+
+  // Two-Point Calibration UI State
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [calibrationMode, setCalibrationMode] = useState<'full' | 'twopoint'>('full');
+  const [selectedPointIndex, setSelectedPointIndex] = useState<1 | 2>(1);
+
+  // Normalized preview coords: imgU (0..1 from left), imgV (0..1 from top)
+  const [p1U, setP1U] = useState<number>(imageConfig?.calibrationPoints?.[0]?.imgU ?? 0.1);
+  const [p1V, setP1V] = useState<number>(imageConfig?.calibrationPoints?.[0]?.imgV ?? 0.1);
+  const [p1CoordInput, setP1CoordInput] = useState<string>(
+    imageConfig?.calibrationPoints?.[0]
+      ? `${Math.round(imageConfig.calibrationPoints[0].worldX)}, ${Math.round(
+          imageConfig.calibrationPoints[0].worldY
+        )}`
+      : '020080'
+  );
+
+  const [p2U, setP2U] = useState<number>(imageConfig?.calibrationPoints?.[1]?.imgU ?? 0.9);
+  const [p2V, setP2V] = useState<number>(imageConfig?.calibrationPoints?.[1]?.imgV ?? 0.9);
+  const [p2CoordInput, setP2CoordInput] = useState<string>(
+    imageConfig?.calibrationPoints?.[1]
+      ? `${Math.round(imageConfig.calibrationPoints[1].worldX)}, ${Math.round(
+          imageConfig.calibrationPoints[1].worldY
+        )}`
+      : '100020'
+  );
+
+  const previewCanvasRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (imageConfig) {
+      setOpacity(imageConfig.opacity ?? 0.85);
+      setFlipY(imageConfig.flipY ?? false);
+      setTileUrl(imageConfig.tileUrlTemplate ?? '');
+      if (imageConfig.isCalibrated) {
+        setCalibrationMode('twopoint');
+      }
+    }
+  }, [imageConfig, terrain]);
 
   if (!isOpen) return null;
 
   const showToast = (msg: string) => {
     setStatusMsg(msg);
-    setTimeout(() => setStatusMsg(null), 2500);
+    setErrorMsg(null);
+    setTimeout(() => setStatusMsg(null), 3500);
   };
 
-  const handleApplyRecoilComposite = async (targetTerrain: TerrainId = terrain) => {
-    const preset = RECOIL_MAP_PRESETS[targetTerrain];
-    if (!preset) return;
-    try {
-      const bounds = getDefaultBounds(targetTerrain, preset.sizeMeters);
-      const savedConfig = await saveTerrainImage(targetTerrain, null, {
-        imageUrl: preset.compositeUrl,
-        externalImageUrl: preset.compositeUrl,
-        opacity,
-        tileSourceType: 'image',
-        tileUrlTemplate: '',
-        bounds,
-        isCalibrated: true,
-      });
-      if (targetTerrain === terrain) {
-        onImageConfigChanged(savedConfig);
-      } else if (onSelectTerrain) {
-        onSelectTerrain(targetTerrain);
-        onImageConfigChanged(savedConfig);
-      }
-      showToast(
-        language === 'ar'
-          ? `تم تطبيق خريطة ${preset.nameAr} المجمعة من recoil.org بنجاح!`
-          : `${preset.name} composite map applied from recoil.org!`
-      );
-    } catch (err) {
-      alert('فشل في حفظ مصدر الخريطة.');
-      console.error(err);
-    }
+  const showError = (msg: string) => {
+    setErrorMsg(msg);
+    setStatusMsg(null);
   };
 
-  const handleApplyRecoilTiles = async (targetTerrain: TerrainId = terrain) => {
-    const preset = RECOIL_MAP_PRESETS[targetTerrain];
-    if (!preset) return;
-    try {
-      const bounds = getDefaultBounds(targetTerrain, preset.sizeMeters);
-      const savedConfig = await saveTerrainImage(targetTerrain, null, {
-        imageUrl: null,
-        externalImageUrl: undefined,
-        opacity,
-        tileSourceType: 'recoil',
-        tileUrlTemplate: preset.tileUrlTemplate,
-        bounds,
-        isCalibrated: true,
-      });
-      if (targetTerrain === terrain) {
-        onImageConfigChanged(savedConfig);
-      } else if (onSelectTerrain) {
-        onSelectTerrain(targetTerrain);
-        onImageConfigChanged(savedConfig);
-      }
-      showToast(
-        language === 'ar'
-          ? `تم تفعيل خادم بلاطات ${preset.nameAr} من recoil.org!`
-          : `${preset.name} live tile layer from recoil.org activated!`
-      );
-    } catch (err) {
-      alert('فشل في تفعيل خادم البلاطات.');
-      console.error(err);
-    }
-  };
-
+  // ---------------------------------------------------------------------------
+  // 1. RELIABLE LOCAL FILE PROCESSING (PNG / JPG / WebP up to 4200+ px)
+  // ---------------------------------------------------------------------------
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setIsProcessingImage(true);
+    setProcessProgress(
+      language === 'ar' ? 'جارٍ فحص ومعالجة أبعاد الصورة...' : 'Analyzing and preparing image dimensions...'
+    );
+    setErrorMsg(null);
+
     try {
-      const savedConfig = await saveTerrainImage(terrain, file, {
+      mapLogger.addLog('info', `بدء قراءة ملف الصورة المحلي (${file.name}, ${(file.size / 1024 / 1024).toFixed(1)} MB)`);
+
+      const processed = await processLocalImageFile(file, 4096);
+
+      if (processed.isDownscaled) {
+        setProcessProgress(
+          language === 'ar'
+            ? `تم تحسين الصورة بنجاح إلى دقة ${processed.width}×${processed.height} لتسريع العرض، مع الاحتفاظ بالأصل.`
+            : `Image optimized to ${processed.width}x${processed.height} for display.`
+        );
+      }
+
+      const defaultB = getDefaultBounds(terrain);
+
+      const savedConfig = await saveTerrainImage(terrain, processed.originalBlob, {
+        displayBlob: processed.displayBlob,
+        naturalWidth: processed.width,
+        naturalHeight: processed.height,
         opacity,
+        flipY,
         tileSourceType: 'image',
-        tileUrlTemplate: tileUrl,
-        bounds: getDefaultBounds(terrain),
+        bounds: defaultB,
         isCalibrated: false,
       });
+
       onImageConfigChanged(savedConfig);
-      showToast('تم تحميل وحفظ صورة الخريطة محلياً في IndexedDB!');
-    } catch (err) {
-      alert('فشل في حفظ الصورة محلياً.');
-      console.error(err);
+      mapLogger.addLog(
+        'info',
+        `تم حفظ صورة الخريطة لـ ${terrain} محلياً بنجاح (${processed.width}x${processed.height}px).`
+      );
+      showToast(
+        language === 'ar'
+          ? `تم تحميل وحفظ صورة ${terrain} محلياً (${processed.width} × ${processed.height} بكسل).`
+          : `Map image loaded locally (${processed.width} × ${processed.height} px).`
+      );
+    } catch (err: any) {
+      mapLogger.recordImageError(err.message || 'فشل معالجة الصورة');
+      showError(err.message || (language === 'ar' ? 'فشل تحميل الصورة.' : 'Failed to load image.'));
+    } finally {
+      setIsProcessingImage(false);
+      setProcessProgress(null);
+      e.target.value = '';
     }
-    e.target.value = '';
   };
 
+  // ---------------------------------------------------------------------------
+  // 2. TOGGLE "عكس المحور الرأسي" (FLIP Y)
+  // ---------------------------------------------------------------------------
+  const handleToggleFlipY = async () => {
+    const newFlip = !flipY;
+    setFlipY(newFlip);
+
+    if (imageConfig) {
+      const updated = await saveTerrainImage(terrain, imageConfig.imageBlob ?? null, {
+        opacity,
+        flipY: newFlip,
+        bounds: imageConfig.bounds,
+        isCalibrated: imageConfig.isCalibrated,
+        tileSourceType: imageConfig.tileSourceType,
+        tileUrlTemplate: tileUrl,
+        naturalWidth: imageConfig.naturalWidth,
+        naturalHeight: imageConfig.naturalHeight,
+      });
+      onImageConfigChanged(updated);
+      mapLogger.addLog('info', `تم تغيير عكس المحور الرأسي لخريطة ${terrain} إلى: ${newFlip ? 'نعم' : 'لا'}`);
+      showToast(
+        newFlip
+          ? language === 'ar'
+            ? 'تم تفعيل عكس المحور الرأسي.'
+            : 'Vertical flip enabled.'
+          : language === 'ar'
+          ? 'تم إلغاء عكس المحور الرأسي.'
+          : 'Vertical flip disabled.'
+      );
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // 3. ENFUSION MAP MAKER FOLDER TILES (LOCAL STORAGE)
+  // ---------------------------------------------------------------------------
   const handleFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     setIsUploadingFolder(true);
+    setErrorMsg(null);
     try {
       const fileList = Array.from(files);
       const count = await storeTileFolder(terrain, fileList);
       const updated = await saveTerrainImage(terrain, null, {
         opacity,
+        flipY,
         tileSourceType: 'folder',
         tileFolderCount: count,
         bounds: getDefaultBounds(terrain),
       });
       onImageConfigChanged(updated);
-      showToast(`تم استيراد ${count} بلاطة محلياً من مجلد EnfusionMapMaker بنجاح!`);
-    } catch (err) {
-      alert('تعذر استيراد مجلد البلاطات.');
-      console.error(err);
+      showToast(
+        language === 'ar'
+          ? `تم استيراد ${count} شريحة محلياً من مجلد EnfusionMapMaker بنجاح!`
+          : `Imported ${count} tiles locally from EnfusionMapMaker folder!`
+      );
+    } catch (err: any) {
+      mapLogger.recordImageError(err.message);
+      showError(language === 'ar' ? 'تعذر استيراد مجلد الشرائح.' : 'Failed to import tile folder.');
     } finally {
       setIsUploadingFolder(false);
+      e.target.value = '';
     }
-    e.target.value = '';
   };
 
+  // ---------------------------------------------------------------------------
+  // 4. ADVANCED CUSTOM TILE URL TEMPLATE
+  // ---------------------------------------------------------------------------
+  const handleSaveTileUrl = async () => {
+    const trimmed = tileUrl.trim();
+    const updated = await saveTerrainImage(terrain, imageConfig?.imageBlob ?? null, {
+      opacity,
+      flipY,
+      bounds: imageConfig?.bounds,
+      isCalibrated: imageConfig?.isCalibrated,
+      tileSourceType: trimmed ? 'url' : 'none',
+      tileUrlTemplate: trimmed,
+    });
+    onImageConfigChanged(updated);
+    showToast(language === 'ar' ? 'تم حفظ قالب رابط الشرائح المخصص.' : 'Custom tile URL template saved.');
+  };
+
+  // ---------------------------------------------------------------------------
+  // 5. DELETE STORED IMAGERY
+  // ---------------------------------------------------------------------------
   const handleDeleteImageOrTiles = async () => {
-    if (window.confirm('هل تريد حذف صورة الخريطة والبلاطات المخزنة لهذا التضاريس من جهازك؟')) {
+    if (
+      window.confirm(
+        language === 'ar'
+          ? 'هل تريد بالتأكيد إزالة صورة الخريطة والشرائح المخزنة لهذا التضاريس من جهازك؟'
+          : 'Are you sure you want to delete stored map image and tiles for this terrain?'
+      )
+    ) {
       await deleteTerrainImage(terrain);
       onImageConfigChanged(null);
-      showToast('تم حذف مصدر الخريطة من المتصفح.');
+      showToast(language === 'ar' ? 'تم حذف ملف الخريطة من المتصفح.' : 'Map imagery removed from browser.');
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // 6. OPACITY ADJUSTMENT
+  // ---------------------------------------------------------------------------
   const handleOpacityChange = async (val: number) => {
     setOpacity(val);
     const updated = await saveTerrainImage(terrain, imageConfig?.imageBlob ?? null, {
       opacity: val,
+      flipY,
       bounds: imageConfig?.bounds,
       isCalibrated: imageConfig?.isCalibrated,
       tileUrlTemplate: tileUrl,
@@ -211,127 +311,219 @@ export const MapImageCalibrationModal: React.FC<MapImageCalibrationModalProps> =
     onImageConfigChanged(updated);
   };
 
-  const handleSaveTileUrl = async () => {
-    const updated = await saveTerrainImage(terrain, imageConfig?.imageBlob ?? null, {
-      opacity,
-      bounds: imageConfig?.bounds,
-      isCalibrated: imageConfig?.isCalibrated,
-      tileSourceType: 'url',
-      tileUrlTemplate: tileUrl.trim(),
-    });
-    onImageConfigChanged(updated);
-    showToast('تم حفظ رابط قالب البلاطات!');
+  // ---------------------------------------------------------------------------
+  // 7. TWO-POINT CALIBRATION
+  // ---------------------------------------------------------------------------
+  const handlePreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!previewCanvasRef.current) return;
+    const rect = previewCanvasRef.current.getBoundingClientRect();
+    const u = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const v = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+
+    if (selectedPointIndex === 1) {
+      setP1U(u);
+      setP1V(v);
+    } else {
+      setP2U(u);
+      setP2V(v);
+    }
   };
 
-  const handleApplyCalibration = async () => {
-    const p1Parsed = parseGridReference(p1CoordInput);
-    const p2Parsed = parseGridReference(p2CoordInput);
-
-    if (!p1Parsed || !p2Parsed) {
-      alert('إحداثيات غير صالحة. يرجى إدخال 6 أو 8 أرقام للشبكة (مثال: 045112).');
-      return;
-    }
-
-    const calculatedBounds = computeCalibrationBounds(
-      { imgU: p1U, imgV: p1V, worldX: p1Parsed.x, worldY: p1Parsed.y },
-      { imgU: p2U, imgV: p2V, worldX: p2Parsed.x, worldY: p2Parsed.y }
-    );
-
-    if (!calculatedBounds) {
-      alert('تعذر حساب الأبعاد. تأكد من أن النقطتين متباعدتان في الصورة.');
-      return;
-    }
-
-    const updated = await saveTerrainImage(terrain, imageConfig?.imageBlob ?? null, {
-      opacity,
-      bounds: calculatedBounds,
-      isCalibrated: true,
-      tileUrlTemplate: tileUrl,
-      tileSourceType: imageConfig?.tileSourceType,
-    });
-    onImageConfigChanged(updated);
-    setIsCalibrating(false);
-    showToast('تمت معايرة أبعاد الخريطة بنجاح!');
-  };
-
-  const handleResetCalibration = async () => {
+  const handleApplyFullTerrainBounds = async () => {
     const defaultB = getDefaultBounds(terrain);
     const updated = await saveTerrainImage(terrain, imageConfig?.imageBlob ?? null, {
       opacity,
+      flipY,
       bounds: defaultB,
       isCalibrated: false,
       tileUrlTemplate: tileUrl,
       tileSourceType: imageConfig?.tileSourceType,
     });
     onImageConfigChanged(updated);
-    showToast('تمت استعادة الأبعاد الافتراضية للتضاريس.');
+    setCalibrationMode('full');
+    setIsCalibrating(false);
+    mapLogger.addLog('info', `تم تطبيق أبعاد التضاريس الكاملة (${defaultB[1][0]}م).`);
+    showToast(language === 'ar' ? 'تم ضبط الصورة لتغطي التضاريس كاملة.' : 'Full terrain bounds applied.');
   };
+
+  const handleApplyTwoPointCalibration = async () => {
+    // Parse user inputs for point 1 and 2 (can be 6-digit grid like 045112 or X, Y in meters)
+    const parseCoordOrGrid = (input: string) => {
+      const parts = input.split(/[, ]+/).filter(Boolean);
+      if (parts.length === 2) {
+        const x = parseFloat(parts[0]);
+        const y = parseFloat(parts[1]);
+        if (!isNaN(x) && !isNaN(y)) return { x, y };
+      }
+      return parseGridReference(input);
+    };
+
+    const p1Parsed = parseCoordOrGrid(p1CoordInput);
+    const p2Parsed = parseCoordOrGrid(p2CoordInput);
+
+    if (!p1Parsed || !p2Parsed) {
+      showError(
+        language === 'ar'
+          ? 'إحداثيات غير صالحة. يرجى إدخال 6 أرقام للشبكة (مثل 045112) أو أمتار (مثل 4500, 11200).'
+          : 'Invalid coordinates. Enter 6-digit grid or meters (e.g. 4500, 11200).'
+      );
+      return;
+    }
+
+    const p1: CalibrationPoint = {
+      imgU: p1U,
+      imgV: p1V,
+      worldX: p1Parsed.x,
+      worldY: p1Parsed.y,
+    };
+    const p2: CalibrationPoint = {
+      imgU: p2U,
+      imgV: p2V,
+      worldX: p2Parsed.x,
+      worldY: p2Parsed.y,
+    };
+
+    const calculatedBounds = computeCalibrationBounds(p1, p2);
+
+    if (!calculatedBounds) {
+      showError(
+        language === 'ar'
+          ? 'تعذر حساب المعايرة. تأكد من أن النقطتين 1 و 2 متباعدتان قطرياً على الصورة.'
+          : 'Could not compute bounds. Ensure points 1 and 2 are well-separated.'
+      );
+      return;
+    }
+
+    const updated = await saveTerrainImage(terrain, imageConfig?.imageBlob ?? null, {
+      opacity,
+      flipY,
+      bounds: calculatedBounds,
+      isCalibrated: true,
+      calibrationPoints: [p1, p2],
+      tileUrlTemplate: tileUrl,
+      tileSourceType: imageConfig?.tileSourceType,
+    });
+
+    onImageConfigChanged(updated);
+    setIsCalibrating(false);
+    mapLogger.addLog(
+      'info',
+      `تمت معايرة خريطة ${terrain} بنقطتين بنجاح: P1(${p1.worldX}, ${p1.worldY}), P2(${p2.worldX}, ${p2.worldY})`
+    );
+    showToast(language === 'ar' ? 'تمت معايرة أبعاد الخريطة بدقة وحفظها!' : 'Map calibrated successfully!');
+  };
+
+  const recoilInfo = RECOIL_TERRAIN_INFO[terrain];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
-      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl max-w-xl w-full overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-5 py-4 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <ImageIcon className="w-5 h-5 text-cyan-400" />
+            <div className="w-8 h-8 rounded-lg bg-cyan-950 border border-cyan-800/80 flex items-center justify-center text-cyan-400">
+              <ImageIcon className="w-5 h-5" />
+            </div>
             <div>
               <h3 className="text-base font-bold text-slate-100">
-                {language === 'ar' ? 'مصدر خريطة التضاريس والبلاطات' : 'Map Imagery & Tiles'}
+                {language === 'ar' ? 'مصدر خريطة التضاريس والمعايرة' : 'Terrain Map Image & Calibration'}
               </h3>
-              <p className="text-xs text-slate-400 capitalize">{terrain}</p>
+              <p className="text-xs text-slate-400 capitalize">
+                {recoilInfo ? recoilInfo.nameAr || recoilInfo.name : terrain}
+              </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            {onOpenDiagnostics && (
+              <button
+                onClick={onOpenDiagnostics}
+                className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold flex items-center gap-1 transition"
+                title={language === 'ar' ? 'تشخيص الخريطة' : 'Diagnostics'}
+              >
+                <span>{language === 'ar' ? 'التشخيص' : 'Diagnostics'}</span>
+              </button>
+            )}
+
             <button
               onClick={onOpenHelp}
-              className="p-1.5 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-slate-800 transition flex items-center gap-1 text-xs"
+              className="p-1.5 rounded-lg text-amber-400 hover:text-amber-300 hover:bg-slate-800 transition"
               title={t.howToPrepareMap}
             >
               <HelpCircle className="w-4 h-4" />
-              <span className="hidden sm:inline">{t.howToPrepareMap}</span>
             </button>
+
             <button
               onClick={onClose}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        {/* Content */}
+        {/* Modal Scrollable Body */}
         <div className="p-5 space-y-4 overflow-y-auto flex-1 text-xs">
-          {/* Status Toast */}
+          {/* Status / Error banners */}
           {statusMsg && (
-            <div className="p-2.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2">
-              <Check className="w-4 h-4" />
+            <div className="p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+              <Check className="w-4 h-4 shrink-0" />
               <span>{statusMsg}</span>
             </div>
           )}
 
-          {/* Privacy & Storage Guarantee */}
-          <div className="p-3 rounded-xl bg-cyan-950/30 border border-cyan-800/40 text-cyan-300 text-xs flex items-start gap-2.5">
-            <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-            <p className="leading-relaxed">
-              {language === 'ar'
-                ? 'يتم تخزين الصور والبلاطات محلياً فقط على جهازك (IndexedDB)، ولا يتم رفعها أو تخزينها على أي خادم خارجي.'
-                : 'All images and map tiles are stored strictly on this device (IndexedDB) and are never uploaded.'}
-            </p>
+          {errorMsg && (
+            <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+          )}
+
+          {/* Privacy & Zero-Hotlink Guarantee */}
+          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 flex items-start gap-2.5">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="leading-relaxed text-[11px]">
+              <p className="font-semibold text-slate-200">
+                {language === 'ar'
+                  ? 'خصوصية وأمان: يتم تخزين الصور والشرائح محلياً على جهازك فقط (IndexedDB).'
+                  : 'Privacy Guarantee: Images and tiles are kept strictly in your local browser storage (IndexedDB).'}
+              </p>
+              <p className="text-slate-400 mt-0.5">
+                {language === 'ar'
+                  ? 'لا يتم رفع الصور لأي خادم ولا يتم استهلاك باندويث خارجي دون إذنك.'
+                  : 'Zero external hotlinking. Images stay completely private on your device.'}
+              </p>
+            </div>
+          </div>
+
+          {/* External Reference Link (Opens in new tab with credit) */}
+          <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Info className="w-4 h-4 text-cyan-400 shrink-0" />
+              <div className="text-[11px]">
+                <span className="text-slate-300 font-semibold">
+                  {language === 'ar' ? 'خرائط مرجعية من Nick Ludlam:' : 'Reference maps by Nick Ludlam:'}
+                </span>
+                <span className="text-slate-400 block">
+                  {language === 'ar'
+                    ? 'يمكنك تنزيل الخريطة يدوياً من موقعه ثم رفعها كصورة محلية أدناه.'
+                    : 'Download the map from reforger.recoil.org and upload it below.'}
+                </span>
+              </div>
+            </div>
+            <a
+              href={recoilInfo?.pageUrl || 'https://reforger.recoil.org/'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1.5 shrink-0 transition"
+            >
+              <span>reforger.recoil.org</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
           </div>
 
           {/* Source Tabs */}
           <div className="flex rounded-xl bg-slate-950 border border-slate-800 p-1 gap-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab('recoil')}
-              className={`flex-1 py-1.5 rounded-lg font-bold transition flex items-center justify-center gap-1.5 ${
-                activeTab === 'recoil' ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>{language === 'ar' ? 'خرائط Recoil.org' : 'Recoil.org'}</span>
-            </button>
             <button
               type="button"
               onClick={() => setActiveTab('image')}
@@ -340,7 +532,7 @@ export const MapImageCalibrationModal: React.FC<MapImageCalibrationModalProps> =
               }`}
             >
               <ImageIcon className="w-3.5 h-3.5" />
-              <span>{language === 'ar' ? 'صورة لقطة شاشة' : 'Single Image'}</span>
+              <span>{language === 'ar' ? 'صورة محلية (PNG/JPG)' : 'Local Image'}</span>
             </button>
             <button
               type="button"
@@ -350,7 +542,7 @@ export const MapImageCalibrationModal: React.FC<MapImageCalibrationModalProps> =
               }`}
             >
               <FolderOpen className="w-3.5 h-3.5" />
-              <span>EnfusionMapMaker</span>
+              <span>{language === 'ar' ? 'مجلد الشرائح' : 'Tile Folder'}</span>
             </button>
             <button
               type="button"
@@ -360,484 +552,419 @@ export const MapImageCalibrationModal: React.FC<MapImageCalibrationModalProps> =
               }`}
             >
               <Link className="w-3.5 h-3.5" />
-              <span>{language === 'ar' ? 'رابط ويب' : 'Tile URL'}</span>
+              <span>{language === 'ar' ? 'رابط شرائح مخصص' : 'Custom URL'}</span>
             </button>
           </div>
 
-          {/* TAB 0: Recoil.org Maps (Everon, Arland, Kolguyev) */}
-          {activeTab === 'recoil' && (
-            <div className="space-y-4">
-              {/* Attribution Banner */}
-              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-amber-400 font-bold text-xs">
-                    <Globe className="w-4 h-4" />
-                    <span>{language === 'ar' ? 'خرائط مشروع reforger.recoil.org' : 'reforger.recoil.org Project Maps'}</span>
-                  </div>
-                  <a
-                    href="https://reforger.recoil.org/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] text-cyan-400 hover:underline flex items-center gap-1"
-                  >
-                    <span>reforger.recoil.org</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  {language === 'ar'
-                    ? 'خرائط عالية الدقة أُنشئت بواسطة Nick Ludlam عبر EnfusionMapMaker. يمكنك تطبيق الخريطة المجمعة الكاملة (Composite Map) فائقة الوضوح، أو تفعيل خادم البلاطات التفاعلي المباشر.'
-                    : 'High-resolution maps created by Nick Ludlam using EnfusionMapMaker. You can load full composite maps or stream live interactive tiles.'}
-                </p>
-              </div>
-
-              {/* Current Terrain Preset Highlight Card */}
-              {(() => {
-                const currentPreset = RECOIL_MAP_PRESETS[terrain];
-                if (!currentPreset) return null;
-                const isCurrentActive =
-                  imageConfig?.tileSourceType === 'recoil' ||
-                  imageConfig?.imageUrl === currentPreset.compositeUrl ||
-                  imageConfig?.externalImageUrl === currentPreset.compositeUrl;
-
-                return (
-                  <div className="p-3.5 rounded-xl bg-slate-950 border-2 border-cyan-500/50 space-y-3 shadow-lg">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-slate-100 text-sm">
-                            {language === 'ar' ? currentPreset.nameAr : currentPreset.name}
-                          </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800">
-                            {currentPreset.sizeMeters >= 1000
-                              ? `${currentPreset.sizeMeters / 1000} × ${currentPreset.sizeMeters / 1000} km`
-                              : `${currentPreset.sizeMeters} m`}
-                          </span>
-                          {isCurrentActive && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800 flex items-center gap-1">
-                              <Check className="w-3 h-3" />
-                              <span>{language === 'ar' ? 'الخريطة النشطة' : 'Active'}</span>
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-1">
-                          {language === 'ar' ? currentPreset.descriptionAr : currentPreset.description}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Preview Thumbnail */}
-                    <div className="w-full h-28 rounded-lg overflow-hidden relative border border-slate-800 bg-slate-900 group">
-                      <img
-                        src={currentPreset.thumbUrl}
-                        alt={currentPreset.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                        loading="lazy"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = currentPreset.compositeUrl;
-                        }}
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent flex items-end p-2.5">
-                        <span className="text-[10px] font-mono text-cyan-300 font-semibold bg-slate-950/80 px-2 py-0.5 rounded">
-                          {terrain === 'kolguyev' ? '4200 × 4200 px' : terrain === 'everon' ? '2159 × 2158 px' : '1699 × 1489 px'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => handleApplyRecoilComposite(terrain)}
-                        className="py-2 px-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow transition"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>{language === 'ar' ? 'تطبيق الخريطة المجمعة الكاملة' : 'Load Composite Map'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleApplyRecoilTiles(terrain)}
-                        className="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition"
-                      >
-                        <Layers className="w-3.5 h-3.5" />
-                        <span>{language === 'ar' ? 'تفعيل خادم البلاطات المباشر' : 'Stream Live Tiles'}</span>
-                      </button>
-                    </div>
-
-                    {/* Direct Links */}
-                    <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800/80">
-                      <a
-                        href={currentPreset.compositeUrl}
-                        download={`${terrain}_composite.jpg`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:text-cyan-300 flex items-center gap-1 font-mono transition"
-                      >
-                        <Download className="w-3 h-3" />
-                        <span>{language === 'ar' ? 'تحميل صورة JPG الأصلية للقرص' : 'Download Full JPG'}</span>
-                      </a>
-                      <a
-                        href={currentPreset.pageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="hover:text-cyan-300 flex items-center gap-1 transition"
-                      >
-                        <span>{language === 'ar' ? 'عرض على recoil.org' : 'View on recoil.org'}</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Other Recoil Maps List */}
-              <div className="space-y-2">
-                <span className="text-xs font-bold text-slate-300 block">
-                  {language === 'ar' ? 'جميع خرائط Recoil.org المتاحة:' : 'All Available Recoil.org Maps:'}
-                </span>
-
-                <div className="grid grid-cols-1 gap-2">
-                  {(Object.keys(RECOIL_MAP_PRESETS) as TerrainId[]).map((tId) => {
-                    const preset = RECOIL_MAP_PRESETS[tId];
-                    const isSelected = terrain === tId;
-
-                    return (
-                      <div
-                        key={tId}
-                        className={`p-2.5 rounded-xl border flex items-center justify-between gap-3 transition ${
-                          isSelected
-                            ? 'bg-slate-900 border-cyan-800/80'
-                            : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <img
-                            src={preset.thumbUrl}
-                            alt={preset.name}
-                            className="w-10 h-10 rounded-lg object-cover border border-slate-800 shrink-0"
-                            loading="lazy"
-                          />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-xs text-slate-200">
-                                {language === 'ar' ? preset.nameAr : preset.name}
-                              </span>
-                              <span className="text-[10px] font-mono text-slate-400">
-                                {preset.sizeMeters / 1000} km
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-slate-400 truncate max-w-[200px] sm:max-w-[280px]">
-                              {language === 'ar' ? preset.descriptionAr : preset.description}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => handleApplyRecoilComposite(tId)}
-                            className="px-2.5 py-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 border border-cyan-800 text-cyan-300 font-bold text-[11px] transition"
-                            title={language === 'ar' ? 'تطبيق الخريطة المجمعة' : 'Apply Composite'}
-                          >
-                            {language === 'ar' ? 'خريطة كاملة' : 'Composite'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleApplyRecoilTiles(tId)}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-[11px] transition"
-                            title={language === 'ar' ? 'تفعيل البلاطات' : 'Apply Tiles'}
-                          >
-                            {language === 'ar' ? 'بلاطات' : 'Tiles'}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 1: Single Screenshot Image */}
+          {/* TAB 1: LOCAL IMAGE */}
           {activeTab === 'image' && (
-            <div className="space-y-3">
-              <div className="bg-slate-950/60 border-2 border-dashed border-slate-700 hover:border-cyan-500 rounded-xl p-5 text-center transition">
+            <div className="space-y-4">
+              {/* File Upload Box */}
+              <div className="border-2 border-dashed border-slate-700 hover:border-cyan-500 rounded-xl p-5 text-center transition bg-slate-950/60">
                 <input
                   type="file"
-                  id="map-image-input"
-                  accept="image/png,image/jpeg,image/webp"
+                  id="map-image-upload"
+                  accept="image/png,image/jpeg,image/webp,image/jpg"
                   onChange={handleFileUpload}
                   className="hidden"
+                  disabled={isProcessingImage}
                 />
-                <label htmlFor="map-image-input" className="cursor-pointer flex flex-col items-center gap-2">
-                  <div className="w-10 h-10 rounded-full bg-slate-800 text-cyan-400 flex items-center justify-center shadow">
-                    <Upload className="w-5 h-5" />
+                <label
+                  htmlFor="map-image-upload"
+                  className="cursor-pointer flex flex-col items-center justify-center gap-2"
+                >
+                  <div className="w-12 h-12 rounded-full bg-cyan-950 border border-cyan-800 flex items-center justify-center text-cyan-400">
+                    <Upload className="w-6 h-6" />
                   </div>
-                  <span className="font-bold text-xs text-slate-200">
-                    {imageConfig?.imageUrl ? 'استبدال صورة الخريطة الحالية' : t.uploadMapImage}
-                  </span>
-                  <span className="text-[11px] text-slate-400">PNG, JPG أو WebP (لقطة شاشة من اللعبة)</span>
+                  <div>
+                    <span className="font-bold text-slate-200 block text-sm">
+                      {isProcessingImage
+                        ? language === 'ar'
+                          ? 'جارٍ فحص ومعالجة الصورة...'
+                          : 'Processing image...'
+                        : language === 'ar'
+                        ? 'اختر صورة الخريطة من جهازك'
+                        : 'Choose map image file'}
+                    </span>
+                    <span className="text-[11px] text-slate-400 mt-1 block">
+                      {language === 'ar'
+                        ? 'يدعم صيغ PNG أو JPG أو WebP (حتى 4200 × 4200 بكسل).'
+                        : 'Supports PNG, JPG, or WebP (up to 4200×4200 px).'}
+                    </span>
+                  </div>
                 </label>
-              </div>
-            </div>
-          )}
 
-          {/* TAB 2: EnfusionMapMaker Tile Folder */}
-          {activeTab === 'folder' && (
-            <div className="space-y-3">
-              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-200">
-                    {language === 'ar' ? 'مجلد بلاطات EnfusionMapMaker' : 'EnfusionMapMaker Tile Folder'}
-                  </span>
-                  {onOpenEnfusionHelp && (
+                {processProgress && (
+                  <div className="mt-3 text-cyan-300 font-mono text-[11px] bg-slate-900/80 p-2 rounded-lg border border-slate-800">
+                    {processProgress}
+                  </div>
+                )}
+              </div>
+
+              {/* Current Image Details & Active Options */}
+              {imageConfig?.imageUrl && (
+                <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span>{language === 'ar' ? 'الصورة الحالية محملة وجاهزة' : 'Current Map Image Loaded'}</span>
+                    </span>
+                    {imageConfig.naturalWidth && imageConfig.naturalHeight && (
+                      <span className="font-mono text-[11px] text-cyan-400 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800">
+                        {imageConfig.naturalWidth} × {imageConfig.naturalHeight} px
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Vertical Flip Toggle ("عكس المحور الرأسي") */}
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900 border border-slate-800">
+                    <div>
+                      <span className="font-semibold text-slate-200 block">
+                        {language === 'ar' ? 'عكس المحور الرأسي (Flip Vertical)' : 'Flip Vertical Axis (Flip Y)'}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        {language === 'ar'
+                          ? 'استخدم هذا الخيار إذا ظهرت الصورة مقلوبة رأساً على عقب.'
+                          : 'Enable if the image appears upside-down.'}
+                      </span>
+                    </div>
+
                     <button
                       type="button"
-                      onClick={onOpenEnfusionHelp}
-                      className="text-cyan-400 hover:text-cyan-300 text-[11px] font-semibold flex items-center gap-1"
+                      onClick={handleToggleFlipY}
+                      className={`px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition ${
+                        flipY
+                          ? 'bg-amber-600 text-white shadow'
+                          : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
+                      }`}
                     >
-                      <HelpCircle className="w-3.5 h-3.5" />
-                      <span>{language === 'ar' ? 'دليل إعداد البلاطات' : 'Guide'}</span>
+                      <RotateCw className="w-3.5 h-3.5" />
+                      <span>{flipY ? (language === 'ar' ? 'مفعّل' : 'On') : (language === 'ar' ? 'معطل' : 'Off')}</span>
                     </button>
-                  )}
-                </div>
-                <p className="text-[11px] text-slate-400 leading-relaxed">
-                  {language === 'ar'
-                    ? 'اختر مجلد البلاطات المقطوعة (الذي يحتوي على مجلدات الأرقام z/x/y.png). سيتم حفظها محلياً في IndexedDB للعمل أوفلاين.'
-                    : 'Select the sliced tile folder (containing {z}/{x}/{y}.png directories). Tiles are cached locally in IndexedDB.'}
-                </p>
-
-                <div className="pt-2">
-                  <label className="cursor-pointer w-full py-2.5 px-4 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md transition">
-                    <FolderOpen className="w-4 h-4" />
-                    <span>
-                      {isUploadingFolder
-                        ? language === 'ar'
-                          ? 'جارِ استيراد البلاطات محلياً...'
-                          : 'Importing tiles locally...'
-                        : language === 'ar'
-                        ? 'اختيار مجلد البلاطات'
-                        : 'Select Tile Folder'}
-                    </span>
-                    <input
-                      type="file"
-                      // @ts-expect-error webkitdirectory is standard for folder picker
-                      webkitdirectory=""
-                      directory=""
-                      multiple
-                      className="hidden"
-                      onChange={handleFolderUpload}
-                      disabled={isUploadingFolder}
-                    />
-                  </label>
-                </div>
-
-                {imageConfig?.tileFolderCount ? (
-                  <div className="text-[11px] text-emerald-400 font-mono pt-1 flex items-center gap-1.5">
-                    <Check className="w-3.5 h-3.5" />
-                    <span>
-                      {language === 'ar'
-                        ? `تم استيراد ${imageConfig.tileFolderCount} بلاطة لهذا التضاريس`
-                        : `${imageConfig.tileFolderCount} tiles imported for this terrain`}
-                    </span>
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: Custom Tile URL Template */}
-          {activeTab === 'url' && (
-            <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 space-y-2">
-              <label className="text-xs font-semibold text-slate-300 block flex items-center gap-1.5">
-                <Link className="w-3.5 h-3.5 text-cyan-400" />
-                <span>{t.customTileUrl}</span>
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="https://example.com/tiles/{z}/{x}/{y}.png"
-                  value={tileUrl}
-                  onChange={(e) => setTileUrl(e.target.value)}
-                  className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-cyan-500"
-                  dir="ltr"
-                />
-                <button
-                  onClick={handleSaveTileUrl}
-                  className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold transition"
-                >
-                  {t.saveTileUrl}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Opacity & Current Status Controls */}
-          {(imageConfig?.imageUrl || imageConfig?.tileSourceType === 'folder' || imageConfig?.tileUrlTemplate) && (
-            <div className="space-y-3 bg-slate-950/70 p-4 rounded-xl border border-slate-800">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                  <Check className="w-4 h-4" />
-                  <span>
-                    {imageConfig.tileSourceType === 'folder'
-                      ? 'مجلد بلاطات EnfusionMapMaker نشط'
-                      : imageConfig.tileSourceType === 'url'
-                      ? 'خادم البلاطات المخصص نشط'
-                      : 'صورة الخريطة نشطة'}
-                  </span>
-                </span>
-                <button
-                  onClick={handleDeleteImageOrTiles}
-                  className="px-2.5 py-1 rounded bg-rose-950/50 hover:bg-rose-900 border border-rose-800 text-rose-300 text-xs font-medium flex items-center gap-1 transition"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>{t.deleteImage}</span>
-                </button>
-              </div>
-
-              {/* Opacity Slider */}
-              <div className="space-y-1">
-                <div className="flex justify-between text-xs text-slate-300 font-medium">
-                  <span>{t.imageOpacity}</span>
-                  <span className="font-mono text-cyan-400">{Math.round(opacity * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.1"
-                  max="1.0"
-                  step="0.05"
-                  value={opacity}
-                  onChange={(e) => handleOpacityChange(Number(e.target.value))}
-                  className="w-full accent-cyan-400"
-                />
-              </div>
-
-              {/* 2-point Calibration Option for single image */}
-              {imageConfig?.imageUrl && (
-                <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
-                  <div className="text-[11px] text-slate-400 font-mono">
-                    {imageConfig.isCalibrated ? (
-                      <span className="text-amber-300">أبعاد مخصصة معايرة</span>
-                    ) : (
-                      <span>تغطي كامل الجزيرة افتراضياً</span>
-                    )}
                   </div>
 
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setIsCalibrating(!isCalibrating)}
-                      className="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-semibold flex items-center gap-1 transition"
-                    >
-                      <Sliders className="w-3.5 h-3.5" />
-                      <span>{t.calibrateImage}</span>
-                    </button>
-                    {imageConfig.isCalibrated && (
+                  {/* Calibration Choice: Full Terrain vs Two-Point */}
+                  <div className="space-y-2">
+                    <span className="font-semibold text-slate-300 block">
+                      {language === 'ar' ? 'مطابقة أبعاد الصورة على الخريطة:' : 'Map Bounds Calibration:'}
+                    </span>
+
+                    <div className="grid grid-cols-2 gap-2">
                       <button
-                        onClick={handleResetCalibration}
-                        className="p-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white"
-                        title={t.resetCalibration}
+                        type="button"
+                        onClick={handleApplyFullTerrainBounds}
+                        className={`p-2.5 rounded-lg border text-start transition flex flex-col justify-between ${
+                          calibrationMode === 'full' && !imageConfig.isCalibrated
+                            ? 'bg-cyan-950/60 border-cyan-500 text-cyan-200'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                        }`}
                       >
-                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span className="font-bold text-xs">
+                          {language === 'ar' ? 'تغطي الخريطة كاملة' : 'Full Terrain Bounds'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-1">
+                          {language === 'ar'
+                            ? 'للصور المربعة التي تغطي الجزيرة بالكامل من الحافة للحافة.'
+                            : 'For square full-island images.'}
+                        </span>
                       </button>
-                    )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCalibrationMode('twopoint');
+                          setIsCalibrating(true);
+                        }}
+                        className={`p-2.5 rounded-lg border text-start transition flex flex-col justify-between ${
+                          isCalibrating || imageConfig.isCalibrated
+                            ? 'bg-cyan-950/60 border-cyan-500 text-cyan-200'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <span className="font-bold text-xs">
+                          {language === 'ar' ? 'معايرة بنقطتين' : 'Two-Point Calibration'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 mt-1">
+                          {language === 'ar'
+                            ? 'للصور المستطيلة أو الجزئية (لقطات الشاشة غير المربعة).'
+                            : 'For cropped/partial screenshots.'}
+                        </span>
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Interactive Two-Point Calibration Panel */}
+                  {isCalibrating && (
+                    <div className="p-3.5 rounded-xl bg-slate-900 border border-cyan-500/40 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-cyan-300 flex items-center gap-1.5">
+                          <Crosshair className="w-4 h-4 text-cyan-400" />
+                          <span>{language === 'ar' ? 'المعايرة بنقطتين مرجعيتين' : 'Two-Point Calibration'}</span>
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {language === 'ar'
+                            ? 'انقر على النقطة في الصورة وأدخل إحداثياتها'
+                            : 'Click point on image & enter coords'}
+                        </span>
+                      </div>
+
+                      {/* Interactive Canvas/Preview Box */}
+                      <div
+                        ref={previewCanvasRef}
+                        onClick={handlePreviewClick}
+                        className="relative w-full h-48 bg-slate-950 rounded-lg overflow-hidden border border-slate-700 cursor-crosshair select-none"
+                      >
+                        <img
+                          src={imageConfig.imageUrl}
+                          alt="Calibration preview"
+                          className={`w-full h-full object-contain pointer-events-none ${
+                            flipY ? 'scale-y-[-1]' : ''
+                          }`}
+                        />
+
+                        {/* Point 1 Marker */}
+                        <div
+                          className="absolute w-4 h-4 -ml-2 -mt-2 rounded-full border-2 border-cyan-400 bg-cyan-500/40 flex items-center justify-center text-[9px] font-bold text-white shadow"
+                          style={{ left: `${p1U * 100}%`, top: `${p1V * 100}%` }}
+                        >
+                          1
+                        </div>
+
+                        {/* Point 2 Marker */}
+                        <div
+                          className="absolute w-4 h-4 -ml-2 -mt-2 rounded-full border-2 border-amber-400 bg-amber-500/40 flex items-center justify-center text-[9px] font-bold text-white shadow"
+                          style={{ left: `${p2U * 100}%`, top: `${p2V * 100}%` }}
+                        >
+                          2
+                        </div>
+                      </div>
+
+                      {/* Point Selection Tabs */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPointIndex(1)}
+                          className={`p-2 rounded-lg border text-start transition ${
+                            selectedPointIndex === 1
+                              ? 'bg-cyan-950 border-cyan-400 text-cyan-200'
+                              : 'bg-slate-950 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          <div className="font-bold flex items-center gap-1">
+                            <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block"></span>
+                            <span>{language === 'ar' ? 'النقطة الأولى (1)' : 'Point 1'}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-1">
+                            U: {(p1U * 100).toFixed(0)}%, V: {(p1V * 100).toFixed(0)}%
+                          </div>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPointIndex(2)}
+                          className={`p-2 rounded-lg border text-start transition ${
+                            selectedPointIndex === 2
+                              ? 'bg-amber-950 border-amber-400 text-amber-200'
+                              : 'bg-slate-950 border-slate-800 text-slate-400'
+                          }`}
+                        >
+                          <div className="font-bold flex items-center gap-1">
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span>
+                            <span>{language === 'ar' ? 'النقطة الثانية (2)' : 'Point 2'}</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 mt-1">
+                            U: {(p2U * 100).toFixed(0)}%, V: {(p2V * 100).toFixed(0)}%
+                          </div>
+                        </button>
+                      </div>
+
+                      {/* Coordinates Inputs */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-1">
+                            {language === 'ar'
+                              ? 'إحداثيات النقطة 1 (شبكة 6 أرقام أو أمتار):'
+                              : 'Point 1 Grid or Meters:'}
+                          </label>
+                          <input
+                            type="text"
+                            value={p1CoordInput}
+                            onChange={(e) => setP1CoordInput(e.target.value)}
+                            placeholder="e.g. 020080 or 2000, 8000"
+                            className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 font-mono text-xs text-white"
+                            dir="ltr"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] text-slate-400 block mb-1">
+                            {language === 'ar'
+                              ? 'إحداثيات النقطة 2 (شبكة 6 أرقام أو أمتار):'
+                              : 'Point 2 Grid or Meters:'}
+                          </label>
+                          <input
+                            type="text"
+                            value={p2CoordInput}
+                            onChange={(e) => setP2CoordInput(e.target.value)}
+                            placeholder="e.g. 100020 or 10000, 2000"
+                            className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 font-mono text-xs text-white"
+                            dir="ltr"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Apply Two-Point Button */}
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handleApplyTwoPointCalibration}
+                          className="flex-1 py-2 px-3 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow transition"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>{language === 'ar' ? 'تطبيق وحفظ المعايرة' : 'Apply Calibration'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsCalibrating(false)}
+                          className="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition"
+                        >
+                          {language === 'ar' ? 'إلغاء' : 'Cancel'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           )}
 
-          {/* Calibration 2-point Tool */}
-          {isCalibrating && (
-            <div className="bg-slate-950 p-4 rounded-xl border border-amber-500/40 space-y-3">
-              <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Crosshair className="w-4 h-4 text-amber-400" />
-                <span>أداة معايرة النقطتين المرجعيتين</span>
-              </h4>
+          {/* TAB 2: ENFUSIONMAPMAKER FOLDER TILES */}
+          {activeTab === 'folder' && (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                <span className="font-bold text-slate-200 block text-xs">
+                  {language === 'ar' ? 'استيراد مجلد شرائح EnfusionMapMaker' : 'Import EnfusionMapMaker Tiles'}
+                </span>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  {language === 'ar'
+                    ? 'إذا قمت بتوليد الشرائح محلياً بأداة EnfusionMapMaker على حاسوبك، يمكنك اختيار مجلد الشرائح وسيتم حفظها في قاعدة بيانات المتصفح.'
+                    : 'If you generated tiles locally using EnfusionMapMaker, pick the folder and they will be stored offline in IndexedDB.'}
+                </p>
+              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                {/* Point 1 */}
-                <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
-                  <span className="text-xs font-bold text-cyan-400 block">{t.point1}</span>
-                  <div className="flex gap-1">
-                    <input
-                      type="number"
-                      step="0.05"
-                      min="0"
-                      max="1"
-                      value={p1U}
-                      onChange={(e) => setP1U(Number(e.target.value))}
-                      className="w-1/2 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-center font-mono text-cyan-300"
-                      placeholder="U (0..1)"
-                    />
-                    <input
-                      type="number"
-                      step="0.05"
-                      min="0"
-                      max="1"
-                      value={p1V}
-                      onChange={(e) => setP1V(Number(e.target.value))}
-                      className="w-1/2 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-center font-mono text-cyan-300"
-                      placeholder="V (0..1)"
-                    />
+              <div className="border-2 border-dashed border-slate-700 hover:border-cyan-500 rounded-xl p-5 text-center transition bg-slate-950/60">
+                <input
+                  type="file"
+                  id="folder-tiles-upload"
+                  // @ts-ignore
+                  webkitdirectory=""
+                  directory=""
+                  multiple
+                  onChange={handleFolderUpload}
+                  className="hidden"
+                  disabled={isUploadingFolder}
+                />
+                <label
+                  htmlFor="folder-tiles-upload"
+                  className="cursor-pointer flex flex-col items-center justify-center gap-2"
+                >
+                  <div className="w-12 h-12 rounded-full bg-cyan-950 border border-cyan-800 flex items-center justify-center text-cyan-400">
+                    <FolderOpen className="w-6 h-6" />
                   </div>
-                  <input
-                    type="text"
-                    value={p1CoordInput}
-                    onChange={(e) => setP1CoordInput(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 font-mono text-amber-300"
-                    placeholder="Grid (e.g. 020 100)"
-                  />
-                </div>
+                  <span className="font-bold text-slate-200 block text-sm">
+                    {isUploadingFolder
+                      ? language === 'ar'
+                        ? 'جارٍ استيراد الشرائح وتخزينها محلياً...'
+                        : 'Importing tiles into local database...'
+                      : language === 'ar'
+                      ? 'اختر مجلد الشرائح من القرص'
+                      : 'Choose Tile Folder'}
+                  </span>
+                </label>
+              </div>
 
-                {/* Point 2 */}
-                <div className="bg-slate-900/80 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
-                  <span className="text-xs font-bold text-cyan-400 block">{t.point2}</span>
-                  <div className="flex gap-1">
-                    <input
-                      type="number"
-                      step="0.05"
-                      min="0"
-                      max="1"
-                      value={p2U}
-                      onChange={(e) => setP2U(Number(e.target.value))}
-                      className="w-1/2 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-center font-mono text-cyan-300"
-                      placeholder="U (0..1)"
-                    />
-                    <input
-                      type="number"
-                      step="0.05"
-                      min="0"
-                      max="1"
-                      value={p2V}
-                      onChange={(e) => setP2V(Number(e.target.value))}
-                      className="w-1/2 bg-slate-950 border border-slate-700 rounded px-1.5 py-1 text-center font-mono text-cyan-300"
-                      placeholder="V (0..1)"
-                    />
-                  </div>
+              {onOpenEnfusionHelp && (
+                <button
+                  type="button"
+                  onClick={onOpenEnfusionHelp}
+                  className="text-cyan-400 hover:underline flex items-center gap-1 text-[11px]"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>{language === 'ar' ? 'شرح كيفية توليد الشرائح بأداة EnfusionMapMaker' : 'How to generate tiles with EnfusionMapMaker'}</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* TAB 3: ADVANCED USER-ENTERED CUSTOM URL */}
+          {activeTab === 'url' && (
+            <div className="space-y-4">
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                <span className="font-bold text-slate-200 block text-xs">
+                  {language === 'ar' ? 'قالب رابط الشرائح المخصص (خيار متقدم)' : 'Custom Tile URL Template (Advanced)'}
+                </span>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  {language === 'ar'
+                    ? 'هذا الحقل فارغ افتراضياً. إذا كان لديك خادم شرائح خاص بك أو محلي (مثل localhost)، يمكنك إدخال الرابط هنا مع معاملات {z}/{x}/{y}.'
+                    : 'Empty by default. If you host your own tile server, enter the URL template with {z}/{x}/{y}.'}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={tileUrl}
+                  onChange={(e) => setTileUrl(e.target.value)}
+                  placeholder="https://your-server.com/tiles/{z}/{x}/{y}.png"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 font-mono text-xs text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500"
+                  dir="ltr"
+                />
+
+                <button
+                  type="button"
+                  onClick={handleSaveTileUrl}
+                  className="py-2 px-4 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition shadow"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>{language === 'ar' ? 'حفظ الرابط المخصص' : 'Save Custom Tile URL'}</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Common Settings: Opacity Slider & Delete Button */}
+          {imageConfig && (
+            <div className="pt-2 border-t border-slate-800 space-y-3">
+              {/* Opacity */}
+              <div className="flex items-center justify-between gap-4">
+                <span className="font-semibold text-slate-300">
+                  {language === 'ar' ? 'شفافية طبقة الخريطة:' : 'Layer Opacity:'}
+                </span>
+                <div className="flex items-center gap-2 flex-1 max-w-xs">
                   <input
-                    type="text"
-                    value={p2CoordInput}
-                    onChange={(e) => setP2CoordInput(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1 font-mono text-amber-300"
-                    placeholder="Grid (e.g. 100 020)"
+                    type="range"
+                    min="0.1"
+                    max="1.0"
+                    step="0.05"
+                    value={opacity}
+                    onChange={(e) => handleOpacityChange(parseFloat(e.target.value))}
+                    className="w-full accent-cyan-500 cursor-pointer"
                   />
+                  <span className="font-mono text-xs text-cyan-400 w-9 text-end">
+                    {Math.round(opacity * 100)}%
+                  </span>
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-1">
+              {/* Delete Stored Imagery */}
+              <div className="flex justify-end pt-1">
                 <button
-                  onClick={() => setIsCalibrating(false)}
-                  className="px-3 py-1.5 rounded bg-slate-800 text-slate-400 text-xs"
+                  type="button"
+                  onClick={handleDeleteImageOrTiles}
+                  className="text-rose-400 hover:text-rose-300 flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded hover:bg-rose-950/40 transition"
                 >
-                  {t.cancel}
-                </button>
-                <button
-                  onClick={handleApplyCalibration}
-                  className="px-4 py-1.5 rounded bg-amber-600 hover:bg-amber-500 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>{t.applyCalibration}</span>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>{language === 'ar' ? 'حذف بيانات الخريطة المخزنة لهذا التضاريس' : 'Delete stored imagery'}</span>
                 </button>
               </div>
             </div>
@@ -845,12 +972,17 @@ export const MapImageCalibrationModal: React.FC<MapImageCalibrationModalProps> =
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 bg-slate-950 border-t border-slate-800 flex justify-end">
+        <div className="px-5 py-3 bg-slate-950/80 border-t border-slate-800 flex items-center justify-between">
+          <span className="text-[11px] text-slate-500">
+            {language === 'ar'
+              ? 'تُحفظ جميع التعديلات محلياً وتعمل فورياً على الخريطة.'
+              : 'All adjustments apply immediately to the map.'}
+          </span>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition"
+            className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition shadow"
           >
-            {t.close}
+            {language === 'ar' ? 'تم' : 'Done'}
           </button>
         </div>
       </div>

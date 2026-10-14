@@ -26,6 +26,8 @@ import {
   Settings,
   Layers,
   HelpCircle,
+  Activity,
+  Compass,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -49,6 +51,8 @@ interface NavbarProps {
   onCenterTarget: () => void;
   onOpenTerrainSettings: (terrainId: TerrainId) => void;
   onOpenMapImageModal: () => void;
+  onOpenDiagnostics?: () => void;
+  onOpenExternalMaps?: () => void;
   onOpenPoiModal: () => void;
   onOpenLocationLayersModal: () => void;
   onOpenAccuracyTestModal: () => void;
@@ -80,6 +84,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onCenterTarget,
   onOpenTerrainSettings,
   onOpenMapImageModal,
+  onOpenDiagnostics,
+  onOpenExternalMaps,
   onOpenPoiModal,
   onOpenLocationLayersModal,
   onOpenAccuracyTestModal,
@@ -270,14 +276,38 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <div className="h-4 w-[1px] bg-slate-800 shrink-0"></div>
 
-        {/* Map Image & Recoil Button */}
+        {/* Map Image Button */}
         <button
           onClick={onOpenMapImageModal}
           className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-medium text-cyan-300 hover:text-white flex items-center gap-1.5 transition shrink-0"
         >
           <ImageIcon className="w-3.5 h-3.5 text-cyan-400" />
-          <span>{language === 'ar' ? 'الخريطة وRecoil' : 'Map & Recoil'}</span>
+          <span>{language === 'ar' ? 'صورة الخريطة' : 'Map Image'}</span>
         </button>
+
+        {/* Map Diagnostics Button */}
+        {onOpenDiagnostics && (
+          <button
+            onClick={onOpenDiagnostics}
+            className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-medium text-cyan-300 hover:text-white flex items-center gap-1.5 transition shrink-0"
+            title={language === 'ar' ? 'تشخيص الخريطة' : 'Map Diagnostics'}
+          >
+            <Activity className="w-3.5 h-3.5 text-cyan-400" />
+            <span>{language === 'ar' ? 'تشخيص الخريطة' : 'Diagnostics'}</span>
+          </button>
+        )}
+
+        {/* External Maps Button (TacOps & Recoil) */}
+        {onOpenExternalMaps && (
+          <button
+            onClick={onOpenExternalMaps}
+            className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-medium text-emerald-300 hover:text-white flex items-center gap-1.5 transition shrink-0"
+            title={language === 'ar' ? 'خرائط خارجية (TacOps / Recoil)' : 'External Maps'}
+          >
+            <Compass className="w-3.5 h-3.5 text-emerald-400" />
+            <span>{language === 'ar' ? 'خرائط خارجية' : 'External Maps'}</span>
+          </button>
+        )}
 
         {/* Places / POIs Button */}
         <button

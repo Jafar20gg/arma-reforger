@@ -1,3 +1,8 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -10,9 +15,10 @@ import {
   Target,
   TerrainConfig,
 } from '../types';
-import { TerrainImageConfig, getTileUrl } from '../utils/imageStore';
+import { TerrainImageConfig, getTileUrl, fetchSiteTileMeta } from '../utils/imageStore';
 import { formatCoordinates, to6DigitGrid } from '../utils/coordinates';
 import { sampleAltitudeAt } from '../utils/heightmap';
+import { mapLogger } from '../utils/mapLogger';
 import { translations } from '../i18n/translations';
 import {
   Crosshair,
@@ -23,8 +29,9 @@ import {
   Plus,
   Compass,
   AlertCircle,
-  Globe,
-  Sparkles,
+  Activity,
+  Maximize2,
+  Upload,
 } from 'lucide-react';
 
 interface MortarMapProps {
@@ -47,8 +54,8 @@ interface MortarMapProps {
   onDeleteTarget: (id: string) => void;
   onCursorMove: (coords: { x: number; y: number } | null) => void;
   onOpenUploadModal: () => void;
-  onOpenRecoilMaps?: () => void;
   onOpenHelpModal: () => void;
+  onOpenDiagnostics?: () => void;
   onAddPlaceAtCoords: (coords: { x: number; y: number }) => void;
   mapInstanceRef?: React.MutableRefObject<L.Map | null>;
 }
@@ -73,8 +80,8 @@ export const MortarMap: React.FC<MortarMapProps> = ({
   onDeleteTarget,
   onCursorMove,
   onOpenUploadModal,
-  onOpenRecoilMaps,
   onOpenHelpModal,
+  onOpenDiagnostics,
   onAddPlaceAtCoords,
   mapInstanceRef,
 }) => {
@@ -84,6 +91,7 @@ export const MortarMap: React.FC<MortarMapProps> = ({
 
   const layersRef = useRef<{
     gridLayer: L.Layer | null;
+    siteTileLayer: L.Layer | null;
     imageOverlay: L.ImageOverlay | null;
     customTileLayer: L.Layer | null;
     mortarMarker: L.Marker | null;
@@ -95,6 +103,7 @@ export const MortarMap: React.FC<MortarMapProps> = ({
     poiLayer: L.LayerGroup | null;
   }>({
     gridLayer: null,
+    siteTileLayer: null,
     imageOverlay: null,
     customTileLayer: null,
     mortarMarker: null,
@@ -106,6 +115,8 @@ export const MortarMap: React.FC<MortarMapProps> = ({
     poiLayer: null,
   });
 
+  const [siteAttribution, setSiteAttribution] = useState<string | null>(null);
+
   // Long press / Context menu state
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -115,23 +126,35 @@ export const MortarMap: React.FC<MortarMapProps> = ({
     targetId?: string;
   } | null>(null);
 
-  // Initialize Map
+  // Fit map view to terrain bounds
+  const handleFitToTerrain = () => {
+    if (!mapRef.current) return;
+    const bounds = L.latLngBounds([0, 0], [terrain.sizeMeters, terrain.sizeMeters]);
+    mapRef.current.fitBounds(bounds, { padding: [20, 20], maxZoom: 4 });
+    mapRef.current.invalidateSize();
+    mapLogger.addLog('info', `تم تطبيق ملاءمة الخريطة لـ ${terrain.nameAr || terrain.name} (${terrain.sizeMeters}م)`);
+  };
+
+  // ---------------------------------------------------------------------------
+  // INITIALIZE LEAFLET MAP
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const bounds = L.latLngBounds(
-      [0, 0],
-      [terrain.sizeMeters, terrain.sizeMeters]
-    );
+    const bounds = L.latLngBounds([0, 0], [terrain.sizeMeters, terrain.sizeMeters]);
+
+    // Calculate initial minZoom based on viewport width/height
+    const containerWidth = containerRef.current.clientWidth || 800;
+    const initialMinZoom = containerWidth < 600 ? -2 : -1.5;
 
     const map = L.map(containerRef.current, {
       crs: L.CRS.Simple,
-      minZoom: -1,
+      minZoom: initialMinZoom,
       maxZoom: 6,
       zoomSnap: 0.25,
       zoomDelta: 0.5,
-      maxBounds: bounds.pad(0.15),
-      maxBoundsViscosity: 0.9,
+      maxBounds: bounds.pad(0.2),
+      maxBoundsViscosity: 0.85,
       attributionControl: false,
     });
 
@@ -141,8 +164,16 @@ export const MortarMap: React.FC<MortarMapProps> = ({
     }
 
     map.setView(terrain.defaultCenter, terrain.defaultZoom);
+    map.fitBounds(bounds, { padding: [15, 15] });
 
-    // Tactical Schematic Grid Layer (Canvas)
+    mapLogger.addLog(
+      'info',
+      `تم تهيئة خريطة Leaflet لتضاريس ${terrain.id} (الحجم: ${terrain.sizeMeters}م)`
+    );
+
+    // ---------------------------------------------------------------------------
+    // ALWAYS-VISIBLE FALLBACK SCHEMATIC BACKGROUND LAYER (Canvas)
+    // ---------------------------------------------------------------------------
     const TacticalGridLayer = L.GridLayer.extend({
       createTile: function (coords: { x: number; y: number; z: number }) {
         const tile = document.createElement('canvas');
@@ -162,21 +193,49 @@ export const MortarMap: React.FC<MortarMapProps> = ({
         const yMax = nw.lat;
         const yMin = se.lat;
 
-        // Dark tactical background
+        // Dark tactical fallback background
         ctx.fillStyle = '#080d1a';
         ctx.fillRect(0, 0, tileSize.x, tileSize.y);
 
-        // Sub-grid dots / textured tone
+        // Subtle textured dots
         ctx.fillStyle = '#0f172a';
         ctx.fillRect(0, 0, tileSize.x, tileSize.y);
 
-        // Major 1km grid lines
+        // 100m Minor Grid Lines (drawn when zoomed in)
+        if (coords.z >= 2) {
+          const minorStep = 100;
+          const startXMinor = Math.floor(xMin / minorStep) * minorStep;
+          const startYMinor = Math.floor(yMin / minorStep) * minorStep;
+
+          ctx.lineWidth = 0.5;
+          ctx.strokeStyle = 'rgba(74, 222, 128, 0.08)';
+
+          for (let gx = startXMinor; gx <= xMax; gx += minorStep) {
+            if (gx < 0 || gx > terrain.sizeMeters) continue;
+            const pt = map.project([yMin, gx], coords.z).subtract(nwPoint);
+            ctx.beginPath();
+            ctx.moveTo(pt.x, 0);
+            ctx.lineTo(pt.x, tileSize.y);
+            ctx.stroke();
+          }
+
+          for (let gy = startYMinor; gy <= yMax; gy += minorStep) {
+            if (gy < 0 || gy > terrain.sizeMeters) continue;
+            const pt = map.project([gy, xMin], coords.z).subtract(nwPoint);
+            ctx.beginPath();
+            ctx.moveTo(0, pt.y);
+            ctx.lineTo(tileSize.x, pt.y);
+            ctx.stroke();
+          }
+        }
+
+        // Major 1km Grid Lines
         const majorStep = 1000;
         const startXMajor = Math.floor(xMin / majorStep) * majorStep;
         const startYMajor = Math.floor(yMin / majorStep) * majorStep;
 
         ctx.lineWidth = 1.2;
-        ctx.strokeStyle = 'rgba(74, 222, 128, 0.22)'; // Tactical green line
+        ctx.strokeStyle = 'rgba(74, 222, 128, 0.28)';
 
         for (let gx = startXMajor; gx <= xMax; gx += majorStep) {
           if (gx < 0 || gx > terrain.sizeMeters) continue;
@@ -186,9 +245,9 @@ export const MortarMap: React.FC<MortarMapProps> = ({
           ctx.lineTo(pt.x, tileSize.y);
           ctx.stroke();
 
-          // Label major grid (e.g. 05)
+          // Label major grid line (e.g. 05)
           const gridLabel = Math.floor(gx / 1000).toString().padStart(2, '0');
-          ctx.fillStyle = 'rgba(74, 222, 128, 0.75)';
+          ctx.fillStyle = 'rgba(74, 222, 128, 0.85)';
           ctx.font = '10px "JetBrains Mono", monospace';
           ctx.fillText(gridLabel, pt.x + 4, 14);
         }
@@ -202,16 +261,24 @@ export const MortarMap: React.FC<MortarMapProps> = ({
           ctx.stroke();
 
           const gridLabel = Math.floor(gy / 1000).toString().padStart(2, '0');
-          ctx.fillStyle = 'rgba(74, 222, 128, 0.75)';
+          ctx.fillStyle = 'rgba(74, 222, 128, 0.85)';
           ctx.font = '10px "JetBrains Mono", monospace';
           ctx.fillText(gridLabel, 4, pt.y - 4);
         }
 
-        // Draw terrain outer boundary box
-        if (xMin <= 0 && xMax >= 0) {
-          const pt = map.project([0, 0], coords.z).subtract(nwPoint);
-          ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
-          ctx.strokeRect(pt.x, 0, 1, tileSize.y);
+        // Outer terrain boundary outline
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+        ctx.lineWidth = 1.5;
+
+        // Bottom edge (y=0)
+        if (0 >= yMin && 0 <= yMax) {
+          const pt = map.project([0, Math.max(0, xMin)], coords.z).subtract(nwPoint);
+          ctx.strokeRect(0, pt.y, tileSize.x, 1);
+        }
+        // Top edge (y=sizeMeters)
+        if (terrain.sizeMeters >= yMin && terrain.sizeMeters <= yMax) {
+          const pt = map.project([terrain.sizeMeters, Math.max(0, xMin)], coords.z).subtract(nwPoint);
+          ctx.strokeRect(0, pt.y, tileSize.x, 1);
         }
 
         return tile;
@@ -233,7 +300,7 @@ export const MortarMap: React.FC<MortarMapProps> = ({
       onCursorMove(null);
     });
 
-    // Map Click: tap to place/select
+    // Tap on map to add/select target
     map.on('click', async (e: L.LeafletMouseEvent) => {
       setContextMenu(null);
 
@@ -247,7 +314,7 @@ export const MortarMap: React.FC<MortarMapProps> = ({
       onAddTarget({ x: clickX, y: clickY, altitude });
     });
 
-    // Long press / Right-click context menu
+    // Right-click / Long press context menu
     map.on('contextmenu', (e: L.LeafletMouseEvent) => {
       const clickX = Math.round(e.latlng.lng);
       const clickY = Math.round(e.latlng.lat);
@@ -259,30 +326,87 @@ export const MortarMap: React.FC<MortarMapProps> = ({
       });
     });
 
+    // Resize observer to ensure map.invalidateSize() is called
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    resizeObserver.observe(containerRef.current);
+
+    // Initial size invalidation after layout settle
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+      map.fitBounds(bounds, { padding: [15, 15] });
+    }, 100);
+
     return () => {
+      clearTimeout(timer);
+      resizeObserver.disconnect();
       map.remove();
       mapRef.current = null;
     };
   }, [terrain.id, terrain.sizeMeters]);
 
-  // ImageOverlay & Custom TileLayer Management
+  // ---------------------------------------------------------------------------
+  // IMAGE OVERLAY, SITE TILES & CUSTOM TILE LAYER MANAGEMENT
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
+    let isCancelled = false;
 
-    // Clean up previous image overlay
+    // Remove previous site tile layer
+    if (layersRef.current.siteTileLayer) {
+      map.removeLayer(layersRef.current.siteTileLayer);
+      layersRef.current.siteTileLayer = null;
+    }
+
+    // Remove previous image overlay
     if (layersRef.current.imageOverlay) {
       map.removeLayer(layersRef.current.imageOverlay);
       layersRef.current.imageOverlay = null;
     }
 
-    // Clean up previous custom tile layer
+    // Remove previous tile layer
     if (layersRef.current.customTileLayer) {
       map.removeLayer(layersRef.current.customTileLayer);
       layersRef.current.customTileLayer = null;
     }
 
-    // Add Tile Layer or Image Overlay based on configured source
+    // 1. Check if the site ships its own tiles at ./tiles/{terrain}/meta.json
+    fetchSiteTileMeta(terrain.id).then((siteMeta) => {
+      if (isCancelled || !mapRef.current) return;
+
+      if (siteMeta) {
+        const bounds = L.latLngBounds([0, 0], [siteMeta.sizeMeters || terrain.sizeMeters, siteMeta.sizeMeters || terrain.sizeMeters]);
+        const tileUrl = `./tiles/${terrain.id}/{z}/{x}/{y}.${siteMeta.format || 'webp'}`;
+
+        const siteLayer = L.tileLayer(tileUrl, {
+          bounds,
+          tileSize: siteMeta.tileSize || 256,
+          minZoom: siteMeta.minZoom ?? 0,
+          maxZoom: siteMeta.maxZoom ?? 6,
+          tms: siteMeta.yOrder === 'tms',
+          opacity: terrainImageConfig?.opacity ?? 0.88,
+          errorTileUrl: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', // graceful transparent tile on 404
+          attribution: siteMeta.attribution,
+        });
+
+        siteLayer.on('tileerror', (e) => {
+          mapLogger.recordTileError(e.error?.message || 'Missing tile');
+        });
+
+        siteLayer.addTo(map);
+        layersRef.current.siteTileLayer = siteLayer;
+        setSiteAttribution(siteMeta.attribution);
+        mapLogger.addLog(
+          'info',
+          `تم تفعيل بلاطات الخريطة التلقائية لـ ${terrain.id} من مجلد الموقع (${siteMeta.attribution})`
+        );
+      } else {
+        setSiteAttribution(null);
+      }
+    });
+
     if (terrainImageConfig?.tileSourceType === 'folder') {
       // Local tiles loaded from EnfusionMapMaker folder via IndexedDB
       const bounds = L.latLngBounds([0, 0], [terrain.sizeMeters, terrain.sizeMeters]);
@@ -318,28 +442,9 @@ export const MortarMap: React.FC<MortarMapProps> = ({
 
       folderTiles.addTo(map);
       layersRef.current.customTileLayer = folderTiles;
-    } else if (terrainImageConfig?.tileSourceType === 'recoil' && terrainImageConfig?.tileUrlTemplate) {
-      // Direct Recoil.org tile layer with inverted Y coordinates (542px tiles)
-      const bounds = L.latLngBounds([0, 0], [terrain.sizeMeters, terrain.sizeMeters]);
-      const RecoilTileLayer = (L.TileLayer as any).extend({
-        getTileUrl: function (coords: { x: number; y: number; z: number }) {
-          const flipped = { ...coords, y: -(coords.y + 1) };
-          return (L.TileLayer.prototype as any).getTileUrl.call(this, flipped);
-        },
-      });
-
-      const recoilTiles = new RecoilTileLayer(terrainImageConfig.tileUrlTemplate, {
-        bounds,
-        minZoom: 0,
-        maxZoom: 6,
-        tileSize: 542,
-        opacity: terrainImageConfig.opacity ?? 0.85,
-      }) as L.Layer;
-
-      recoilTiles.addTo(map);
-      layersRef.current.customTileLayer = recoilTiles;
-    } else if (terrainImageConfig?.tileUrlTemplate && (terrainImageConfig?.tileSourceType === 'url' || !terrainImageConfig?.imageUrl)) {
-      // Custom user-hosted tiles via URL template
+      mapLogger.addLog('info', `تم تفعيل طبقة الشرائح المحلية لـ ${terrain.id}`);
+    } else if (terrainImageConfig?.tileUrlTemplate && terrainImageConfig?.tileSourceType === 'url') {
+      // User-entered custom tile URL template (optional, advanced)
       const bounds = L.latLngBounds([0, 0], [terrain.sizeMeters, terrain.sizeMeters]);
       const tiles = L.tileLayer(terrainImageConfig.tileUrlTemplate, {
         bounds,
@@ -347,25 +452,58 @@ export const MortarMap: React.FC<MortarMapProps> = ({
         maxZoom: 6,
         opacity: terrainImageConfig.opacity,
       });
+
+      tiles.on('tileerror', (e) => {
+        mapLogger.recordTileError(e.error?.message);
+      });
+
       tiles.addTo(map);
       layersRef.current.customTileLayer = tiles;
+      mapLogger.addLog('info', `تم تفعيل طبقة الشرائح المخصصة: ${terrainImageConfig.tileUrlTemplate}`);
     } else if (terrainImageConfig?.imageUrl) {
-      // Single screenshot image overlay
-      const overlay = L.imageOverlay(
-        terrainImageConfig.imageUrl,
-        terrainImageConfig.bounds,
-        {
-          opacity: terrainImageConfig.opacity,
-          interactive: false,
-          zIndex: 4,
+      // Local ImageOverlay in CRS.Simple with bounds [[0, 0], [sizeMeters, sizeMeters]] or calibrated bounds
+      const bounds = terrainImageConfig.bounds || [
+        [0, 0],
+        [terrain.sizeMeters, terrain.sizeMeters],
+      ];
+
+      const overlay = L.imageOverlay(terrainImageConfig.imageUrl, bounds, {
+        opacity: terrainImageConfig.opacity ?? 0.85,
+        interactive: false,
+        zIndex: 4,
+      });
+
+      overlay.on('load', () => {
+        mapLogger.addLog('info', `تم تحميل وعرض طبقة صورة الخريطة لـ ${terrain.id} بنجاح.`);
+
+        // Handle vertical axis flip ("عكس المحور الرأسي") if enabled
+        const imgEl = overlay.getElement();
+        if (imgEl && terrainImageConfig.flipY) {
+          imgEl.style.transform = `${imgEl.style.transform || ''} scaleY(-1)`.trim();
+          imgEl.style.transformOrigin = 'center center';
         }
-      );
+      });
+
+      overlay.on('error', () => {
+        mapLogger.recordImageError('فشل عنصر Leaflet ImageOverlay في عرض الصورة.');
+      });
+
       overlay.addTo(map);
       layersRef.current.imageOverlay = overlay;
+
+      // Fit bounds to the terrain or calibrated image bounds
+      map.fitBounds(bounds as any, { padding: [15, 15] });
+      map.invalidateSize();
     }
+
+    return () => {
+      isCancelled = true;
+    };
   }, [terrainImageConfig, terrain.sizeMeters, terrain.id]);
 
-  // Render Location Layers (JSON imported points)
+  // ---------------------------------------------------------------------------
+  // LOCATION LAYERS (JSON imported points)
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
@@ -402,40 +540,19 @@ export const MortarMap: React.FC<MortarMapProps> = ({
             iconAnchor: [7, 7],
           });
 
-          marker = L.marker([item.y, item.x], {
-            icon,
-            zIndexOffset: 300,
-          });
-
+          marker = L.marker([item.y, item.x], { icon }).addTo(map);
           marker.bindTooltip(
-            `<b>[${layer.name}]</b> ${item.name}${item.height !== undefined ? ` • ${item.height}m` : ''}`,
-            {
-              direction: 'top',
-              offset: [0, -6],
-              className: 'tactical-line-tooltip',
-            }
+            `<b>${item.name}</b><br><span style="font-family: monospace; font-size: 10px;">GRID: ${to6DigitGrid(
+              item.x,
+              item.y
+            )}</span>`,
+            { direction: 'top', offset: [0, -8], opacity: 0.95 }
           );
 
-          marker.on('click', (e: L.LeafletEvent) => {
-            L.DomEvent.stopPropagation(e);
-            onAddTarget({
-              x: item.x,
-              y: item.y,
-              altitude: item.height ?? 0,
-            });
+          marker.on('click', () => {
+            onAddTarget({ x: item.x, y: item.y, altitude: item.height || 0 });
           });
 
-          marker.on('contextmenu', (e: L.LeafletMouseEvent) => {
-            L.DomEvent.stopPropagation(e);
-            setContextMenu({
-              x: e.containerPoint.x,
-              y: e.containerPoint.y,
-              mapX: item.x,
-              mapY: item.y,
-            });
-          });
-
-          marker.addTo(map);
           layersRef.current.locationMarkers.set(markerKey, marker);
         } else {
           marker.setLatLng([item.y, item.x]);
@@ -443,86 +560,17 @@ export const MortarMap: React.FC<MortarMapProps> = ({
       });
     });
 
-    // Remove obsolete markers
     layersRef.current.locationMarkers.forEach((marker, key) => {
       if (!activeItemIds.has(key)) {
         map.removeLayer(marker);
         layersRef.current.locationMarkers.delete(key);
       }
     });
-  }, [locationLayers, terrain.id, onAddTarget]);
+  }, [locationLayers, terrain.id]);
 
-  // Minor 100m Grid Overlay Toggle
-  useEffect(() => {
-    if (!mapRef.current) return;
-    const map = mapRef.current;
-
-    let minorLayer: L.Layer | null = null;
-    if (showGrid100m) {
-      const MinorGrid = L.GridLayer.extend({
-        createTile: function (coords: { x: number; y: number; z: number }) {
-          const tile = document.createElement('canvas');
-          const tileSize = this.getTileSize();
-          tile.width = tileSize.x;
-          tile.height = tileSize.y;
-          const ctx = tile.getContext('2d');
-          if (!ctx) return tile;
-
-          if (coords.z < 2) return tile;
-
-          const nwPoint = L.point(coords.x * tileSize.x, coords.y * tileSize.y);
-          const sePoint = L.point((coords.x + 1) * tileSize.x, (coords.y + 1) * tileSize.y);
-          const nw = map.unproject(nwPoint, coords.z);
-          const se = map.unproject(sePoint, coords.z);
-
-          const xMin = nw.lng;
-          const xMax = se.lng;
-          const yMax = nw.lat;
-          const yMin = se.lat;
-
-          const step = 100;
-          const startX = Math.floor(xMin / step) * step;
-          const startY = Math.floor(yMin / step) * step;
-
-          ctx.lineWidth = 0.6;
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.22)';
-
-          for (let gx = startX; gx <= xMax; gx += step) {
-            if (gx % 1000 === 0) continue;
-            const pt = map.project([yMin, gx], coords.z).subtract(nwPoint);
-            ctx.beginPath();
-            ctx.moveTo(pt.x, 0);
-            ctx.lineTo(pt.x, tileSize.y);
-            ctx.stroke();
-          }
-
-          for (let gy = startY; gy <= yMax; gy += step) {
-            if (gy % 1000 === 0) continue;
-            const pt = map.project([gy, xMin], coords.z).subtract(nwPoint);
-            ctx.beginPath();
-            ctx.moveTo(0, pt.y);
-            ctx.lineTo(tileSize.x, pt.y);
-            ctx.stroke();
-          }
-
-          return tile;
-        },
-      });
-
-      minorLayer = new (MinorGrid as any)({ zIndex: 10 }) as L.Layer;
-      if (minorLayer) {
-        minorLayer.addTo(map);
-      }
-    }
-
-    return () => {
-      if (minorLayer && mapRef.current) {
-        mapRef.current.removeLayer(minorLayer);
-      }
-    };
-  }, [showGrid100m, terrain.sizeMeters]);
-
-  // POIs / Places Layer
+  // ---------------------------------------------------------------------------
+  // POIS (POINTS OF INTEREST)
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
@@ -532,184 +580,107 @@ export const MortarMap: React.FC<MortarMapProps> = ({
       layersRef.current.poiLayer = null;
     }
 
-    if (showPois) {
-      const currentPois = pois.filter((p) => p.terrain === terrain.id);
-      const group = L.layerGroup();
+    if (!showPois) return;
 
-      currentPois.forEach((poi) => {
-        const text = language === 'ar' && poi.nameAr ? poi.nameAr : poi.name;
-        const icon = L.divIcon({
-          className: 'tactical-poi-marker',
-          html: `
-            <div class="px-2 py-0.5 rounded bg-slate-900/90 border ${
-              poi.isVerified ? 'border-emerald-500/60 text-emerald-300' : 'border-amber-500/60 text-amber-300'
-            } text-[10px] font-mono tracking-wider shadow pointer-events-none whitespace-nowrap flex items-center gap-1">
-              <span>📍</span>
-              <span>${text}</span>
-            </div>
-          `,
-          iconSize: [80, 20],
-          iconAnchor: [40, 10],
-        });
+    const currentPois = pois.filter((p) => p.terrain === terrain.id);
+    const poiGroup = L.layerGroup();
 
-        const marker = L.marker([poi.y, poi.x], { icon, interactive: false, zIndexOffset: 200 });
-        group.addLayer(marker);
+    currentPois.forEach((poi) => {
+      const poiIcon = L.divIcon({
+        className: 'poi-custom-marker',
+        html: `
+          <div style="display: flex; flex-direction: column; align-items: center; pointer-events: auto;">
+            <div style="
+              width: 8px;
+              height: 8px;
+              background-color: #38bdf8;
+              border: 1px solid #0f172a;
+              border-radius: 50%;
+              box-shadow: 0 0 4px #38bdf8;
+            "></div>
+            <span style="
+              color: #f8fafc;
+              font-size: 10px;
+              font-weight: 600;
+              text-shadow: 1px 1px 2px #000, -1px -1px 2px #000;
+              margin-top: 2px;
+              white-space: nowrap;
+            ">${language === 'ar' ? poi.nameAr || poi.name : poi.name}</span>
+          </div>
+        `,
+        iconSize: [80, 24],
+        iconAnchor: [40, 4],
       });
 
-      group.addTo(map);
-      layersRef.current.poiLayer = group;
-    }
-  }, [showPois, pois, terrain.id, language]);
-
-  // Mortar Marker
-  useEffect(() => {
-    if (!mapRef.current) return;
-    const map = mapRef.current;
-
-    const mortarIcon = L.divIcon({
-      className: 'mortar-marker-pin',
-      html: `
-        <div class="relative group cursor-grab active:cursor-grabbing">
-          <div class="absolute -inset-1.5 rounded-full bg-cyan-500/30 animate-pulse"></div>
-          <div class="w-8 h-8 rounded-full bg-slate-950 border-2 border-cyan-400 flex items-center justify-center shadow-lg shadow-cyan-500/40">
-            <svg class="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="2" x2="12" y2="6"/>
-              <line x1="12" y1="18" x2="12" y2="22"/>
-              <line x1="2" y1="12" x2="6" y2="12"/>
-              <line x1="18" y1="12" x2="22" y2="12"/>
-              <polygon points="12 8 14 16 10 16" fill="currentColor"/>
-            </svg>
-          </div>
-          <div class="absolute -bottom-6 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-slate-900/90 border border-cyan-500/50 text-[10px] text-cyan-300 font-mono font-bold whitespace-nowrap shadow pointer-events-none" dir="ltr">
-            M (${mortar.altitude}m)
-          </div>
-        </div>
-      `,
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
+      const marker = L.marker([poi.y, poi.x], { icon: poiIcon });
+      marker.on('click', async () => {
+        const { altitude } = await sampleAltitudeAt(terrain.id, poi.x, poi.y, terrain.sizeMeters);
+        onAddTarget({ x: poi.x, y: poi.y, altitude });
+      });
+      marker.addTo(poiGroup);
     });
 
-    if (layersRef.current.mortarMarker) {
-      layersRef.current.mortarMarker.setLatLng([mortar.y, mortar.x]);
-      layersRef.current.mortarMarker.setIcon(mortarIcon);
-    } else {
-      const marker = L.marker([mortar.y, mortar.x], {
-        icon: mortarIcon,
-        draggable: true,
-        zIndexOffset: 1000,
-      });
+    poiGroup.addTo(map);
+    layersRef.current.poiLayer = poiGroup;
+  }, [pois, showPois, terrain.id, language]);
 
-      marker.on('dragend', async (e: L.LeafletEvent) => {
-        const latLng = (e.target as L.Marker).getLatLng();
-        const newX = Math.round(latLng.lng);
-        const newY = Math.round(latLng.lat);
-        const { altitude } = await sampleAltitudeAt(terrain.id, newX, newY, terrain.sizeMeters);
-        onUpdateMortar({ x: newX, y: newY, altitude });
-      });
-
-      marker.on('contextmenu', (e: L.LeafletMouseEvent) => {
-        L.DomEvent.stopPropagation(e);
-        setContextMenu({
-          x: e.containerPoint.x,
-          y: e.containerPoint.y,
-          mapX: mortar.x,
-          mapY: mortar.y,
-        });
-      });
-
-      marker.addTo(map);
-      layersRef.current.mortarMarker = marker;
-    }
-  }, [mortar.x, mortar.y, mortar.altitude, terrain.id]);
-
-  // Target Markers
+  // ---------------------------------------------------------------------------
+  // MORTAR POSITION MARKER & RANGE RINGS
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (!mapRef.current) return;
     const map = mapRef.current;
-    const existingMarkers = layersRef.current.targetMarkers;
-    const activeIds = new Set<string>();
 
-    targets.forEach((tgt, index) => {
-      activeIds.add(tgt.id);
-      const isSelected = tgt.id === selectedTargetId;
-
-      const targetIcon = L.divIcon({
-        className: 'target-marker-pin',
+    // Mortar Marker
+    if (!layersRef.current.mortarMarker) {
+      const mortarIcon = L.divIcon({
+        className: 'mortar-marker-icon',
         html: `
-          <div class="relative group cursor-grab active:cursor-grabbing ${isSelected ? 'scale-110' : 'opacity-85'} transition-transform">
-            ${isSelected ? '<div class="absolute -inset-2 rounded-full bg-red-500/30 animate-ping"></div>' : ''}
-            <div class="w-7 h-7 rounded-full bg-slate-950 border-2 ${isSelected ? 'border-red-500 ring-2 ring-red-400/50' : 'border-red-400/80'} flex items-center justify-center shadow-lg shadow-red-500/30">
-              <span class="text-xs font-mono font-bold ${isSelected ? 'text-red-400' : 'text-slate-200'}">${index + 1}</span>
-            </div>
-            <div class="absolute -bottom-6 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded bg-slate-900/90 border ${isSelected ? 'border-red-500' : 'border-slate-700'} text-[10px] text-slate-100 font-mono whitespace-nowrap shadow pointer-events-none" dir="ltr">
-              ${tgt.name} (${tgt.altitude}m)
-            </div>
+          <div style="
+            width: 28px;
+            height: 28px;
+            background: rgba(8, 145, 178, 0.9);
+            border: 2px solid #22d3ee;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 12px rgba(34, 211, 238, 0.7);
+            cursor: move;
+          ">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="22" y1="12" x2="18" y2="12"></line>
+              <line x1="6" y1="12" x2="2" y2="12"></line>
+              <line x1="12" y1="6" x2="12" y2="2"></line>
+              <line x1="12" y1="22" x2="12" y2="18"></line>
+            </svg>
           </div>
         `,
         iconSize: [28, 28],
         iconAnchor: [14, 14],
       });
 
-      let marker = existingMarkers.get(tgt.id);
-      if (marker) {
-        marker.setLatLng([tgt.y, tgt.x]);
-        marker.setIcon(targetIcon);
-        marker.setZIndexOffset(isSelected ? 900 : 800);
-      } else {
-        marker = L.marker([tgt.y, tgt.x], {
-          icon: targetIcon,
-          draggable: true,
-          zIndexOffset: isSelected ? 900 : 800,
-        });
+      const marker = L.marker([mortar.y, mortar.x], {
+        icon: mortarIcon,
+        draggable: true,
+        zIndexOffset: 1000,
+      }).addTo(map);
 
-        marker.on('click', (e: L.LeafletEvent) => {
-          L.DomEvent.stopPropagation(e);
-          onSelectTarget(tgt.id);
-        });
+      marker.on('dragend', async (e: any) => {
+        const latlng = e.target.getLatLng();
+        const newX = Math.round(latlng.lng);
+        const newY = Math.round(latlng.lat);
+        const { altitude } = await sampleAltitudeAt(terrain.id, newX, newY, terrain.sizeMeters);
+        onUpdateMortar({ x: newX, y: newY, altitude });
+      });
 
-        marker.on('dragend', async (e: L.LeafletEvent) => {
-          const latLng = (e.target as L.Marker).getLatLng();
-          const newX = Math.round(latLng.lng);
-          const newY = Math.round(latLng.lat);
-          const { altitude } = await sampleAltitudeAt(terrain.id, newX, newY, terrain.sizeMeters);
-          onUpdateTarget(tgt.id, { x: newX, y: newY, altitude });
-        });
-
-        marker.on('contextmenu', (e: L.LeafletMouseEvent) => {
-          L.DomEvent.stopPropagation(e);
-          setContextMenu({
-            x: e.containerPoint.x,
-            y: e.containerPoint.y,
-            mapX: tgt.x,
-            mapY: tgt.y,
-            targetId: tgt.id,
-          });
-        });
-
-        marker.addTo(map);
-        existingMarkers.set(tgt.id, marker);
-      }
-    });
-
-    existingMarkers.forEach((marker, id) => {
-      if (!activeIds.has(id)) {
-        map.removeLayer(marker);
-        existingMarkers.delete(id);
-      }
-    });
-  }, [targets, selectedTargetId, terrain.id]);
-
-  // Fire Line & Range Rings
-  useEffect(() => {
-    if (!mapRef.current) return;
-    const map = mapRef.current;
-
-    if (layersRef.current.fireLine) {
-      map.removeLayer(layersRef.current.fireLine);
-      layersRef.current.fireLine = null;
+      layersRef.current.mortarMarker = marker;
+    } else {
+      layersRef.current.mortarMarker.setLatLng([mortar.y, mortar.x]);
     }
 
+    // Range Rings
     if (layersRef.current.minRangeCircle) {
       map.removeLayer(layersRef.current.minRangeCircle);
       layersRef.current.minRangeCircle = null;
@@ -719,67 +690,123 @@ export const MortarMap: React.FC<MortarMapProps> = ({
       layersRef.current.maxRangeCircle = null;
     }
 
-    const activeTarget = targets.find((t) => t.id === selectedTargetId);
+    if (showRangeRings) {
+      layersRef.current.minRangeCircle = L.circle([mortar.y, mortar.x], {
+        radius: 60,
+        color: '#f43f5e',
+        weight: 1.5,
+        dashArray: '3, 4',
+        fill: false,
+        interactive: false,
+      }).addTo(map);
 
-    if (activeTarget && solution) {
-      const line = L.polyline(
+      layersRef.current.maxRangeCircle = L.circle([mortar.y, mortar.x], {
+        radius: 3500,
+        color: '#06b6d4',
+        weight: 1.5,
+        dashArray: '6, 6',
+        fill: true,
+        fillColor: '#06b6d4',
+        fillOpacity: 0.03,
+        interactive: false,
+      }).addTo(map);
+    }
+  }, [mortar, showRangeRings, terrain.id, terrain.sizeMeters]);
+
+  // ---------------------------------------------------------------------------
+  // TARGET MARKERS & BALLISTIC FIRE LINE
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+    const currentTargetIds = new Set(targets.map((t) => t.id));
+
+    // Remove targets that no longer exist
+    layersRef.current.targetMarkers.forEach((marker, id) => {
+      if (!currentTargetIds.has(id)) {
+        map.removeLayer(marker);
+        layersRef.current.targetMarkers.delete(id);
+      }
+    });
+
+    targets.forEach((target, index) => {
+      const isSelected = target.id === selectedTargetId;
+      let marker = layersRef.current.targetMarkers.get(target.id);
+
+      const targetIcon = L.divIcon({
+        className: 'target-marker-icon',
+        html: `
+          <div style="
+            width: ${isSelected ? '26px' : '22px'};
+            height: ${isSelected ? '26px' : '22px'};
+            background: ${isSelected ? 'rgba(239, 68, 68, 0.95)' : 'rgba(220, 38, 38, 0.75)'};
+            border: 2px solid ${isSelected ? '#fecaca' : '#f87171'};
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 ${isSelected ? '14px rgba(239, 68, 68, 0.9)' : '6px rgba(239, 68, 68, 0.5)'};
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 800;
+            cursor: pointer;
+          ">
+            ${index + 1}
+          </div>
+        `,
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      });
+
+      if (!marker) {
+        marker = L.marker([target.y, target.x], {
+          icon: targetIcon,
+          draggable: true,
+          zIndexOffset: isSelected ? 900 : 800,
+        }).addTo(map);
+
+        marker.on('click', () => onSelectTarget(target.id));
+
+        marker.on('dragend', async (e: any) => {
+          const latlng = e.target.getLatLng();
+          const newX = Math.round(latlng.lng);
+          const newY = Math.round(latlng.lat);
+          const { altitude } = await sampleAltitudeAt(terrain.id, newX, newY, terrain.sizeMeters);
+          onUpdateTarget(target.id, { x: newX, y: newY, altitude });
+        });
+
+        layersRef.current.targetMarkers.set(target.id, marker);
+      } else {
+        marker.setLatLng([target.y, target.x]);
+        marker.setIcon(targetIcon);
+        marker.setZIndexOffset(isSelected ? 900 : 800);
+      }
+    });
+
+    // Fire Solution Line
+    if (layersRef.current.fireLine) {
+      map.removeLayer(layersRef.current.fireLine);
+      layersRef.current.fireLine = null;
+    }
+
+    const activeTarget = targets.find((t) => t.id === selectedTargetId) || targets[0];
+    if (activeTarget) {
+      layersRef.current.fireLine = L.polyline(
         [
           [mortar.y, mortar.x],
           [activeTarget.y, activeTarget.x],
         ],
         {
-          color: '#ef4444',
-          weight: 2.5,
-          dashArray: '6, 6',
-          opacity: 0.85,
-        }
-      );
-
-      line.bindTooltip(
-        `${solution.range_m}m | ${solution.azimuth_mil} mil (${solution.azimuth_deg}°)`,
-        {
-          permanent: true,
-          direction: 'center',
-          className: 'tactical-line-tooltip',
-        }
-      );
-
-      line.addTo(map);
-      layersRef.current.fireLine = line;
-    }
-
-    if (showRangeRings && solution) {
-      if (solution.minRange_m > 0) {
-        const minCircle = L.circle([mortar.y, mortar.x], {
-          radius: solution.minRange_m,
           color: '#f59e0b',
-          weight: 1.5,
-          dashArray: '4, 4',
-          fillColor: '#f59e0b',
-          fillOpacity: 0.05,
+          weight: 2,
+          dashArray: '5, 5',
           interactive: false,
-        });
-        minCircle.addTo(map);
-        layersRef.current.minRangeCircle = minCircle;
-      }
-
-      if (solution.maxRange_m > 0) {
-        const maxCircle = L.circle([mortar.y, mortar.x], {
-          radius: solution.maxRange_m,
-          color: '#06b6d4',
-          weight: 1.8,
-          dashArray: '6, 6',
-          fillColor: '#06b6d4',
-          fillOpacity: 0.04,
-          interactive: false,
-        });
-        maxCircle.addTo(map);
-        layersRef.current.maxRangeCircle = maxCircle;
-      }
+        }
+      ).addTo(map);
     }
-  }, [selectedTargetId, targets, solution, mortar.x, mortar.y, showRangeRings]);
+  }, [targets, selectedTargetId, mortar, terrain.id, terrain.sizeMeters]);
 
-  // Context Menu Actions
+  // Context Menu handlers
   const handleSetMortarFromMenu = async () => {
     if (!contextMenu) return;
     const { altitude } = await sampleAltitudeAt(
@@ -818,10 +845,10 @@ export const MortarMap: React.FC<MortarMapProps> = ({
   };
 
   return (
-    <div className="relative w-full h-full select-none overflow-hidden bg-slate-950">
+    <div className="relative w-full h-full select-none overflow-hidden bg-slate-950 flex-1">
       {/* Schematic Compass Rose in Map Corner */}
-      <div className="absolute bottom-4 start-4 z-20 pointer-events-none opacity-40 hover:opacity-80 transition">
-        <div className="w-16 h-16 rounded-full border border-slate-700/80 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center relative font-mono text-[9px] text-slate-400">
+      <div className="absolute bottom-4 start-4 z-20 pointer-events-none opacity-50 hover:opacity-90 transition">
+        <div className="w-16 h-16 rounded-full border border-slate-700/80 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center relative font-mono text-[9px] text-slate-400">
           <span className="absolute top-1 font-bold text-amber-400">N</span>
           <span className="absolute right-1">E</span>
           <span className="absolute bottom-1">S</span>
@@ -830,35 +857,68 @@ export const MortarMap: React.FC<MortarMapProps> = ({
         </div>
       </div>
 
-      {/* Banner when no image is loaded */}
-      {!terrainImageConfig?.imageUrl && !terrainImageConfig?.tileUrlTemplate && (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 max-w-xl w-[94%] bg-slate-950/95 border border-cyan-500/40 rounded-xl p-2.5 sm:p-3 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-200">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2 text-cyan-300 text-xs">
-              <Sparkles className="w-4 h-4 shrink-0 text-amber-400" />
+      {/* Floating Map Controls: "ملاءمة الخريطة" & "تشخيص الخريطة" */}
+      <div className="absolute top-3 end-3 z-30 flex flex-col gap-1.5">
+        <button
+          onClick={handleFitToTerrain}
+          className="p-2 rounded-lg bg-slate-900/90 border border-slate-700/90 hover:border-cyan-500 text-cyan-400 hover:text-white shadow-xl backdrop-blur-md flex items-center gap-1.5 text-xs font-semibold transition"
+          title={language === 'ar' ? 'ملاءمة الخريطة كاملة' : 'Fit Entire Terrain'}
+        >
+          <Maximize2 className="w-4 h-4" />
+          <span className="hidden sm:inline">{language === 'ar' ? 'ملاءمة الخريطة' : 'Fit Map'}</span>
+        </button>
+
+        {onOpenDiagnostics && (
+          <button
+            onClick={onOpenDiagnostics}
+            className="p-2 rounded-lg bg-slate-900/90 border border-slate-700/90 hover:border-cyan-500 text-slate-300 hover:text-cyan-300 shadow-xl backdrop-blur-md flex items-center gap-1.5 text-xs font-semibold transition"
+            title={language === 'ar' ? 'تشخيص الخريطة' : 'Map Diagnostics'}
+          >
+            <Activity className="w-4 h-4 text-cyan-400" />
+            <span className="hidden sm:inline">{language === 'ar' ? 'التشخيص' : 'Diagnostics'}</span>
+          </button>
+        )}
+      </div>
+
+      {/* On-Map Attribution Text (EnfusionMapMaker / Site Tiles) */}
+      {siteAttribution && (
+        <div className="absolute bottom-2 start-2 z-30 max-w-[280px] sm:max-w-md bg-slate-950/85 backdrop-blur-md px-2.5 py-1 rounded-lg border border-slate-800 text-[10px] text-slate-300 flex items-center gap-1.5 shadow-lg select-none pointer-events-auto">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+          <span className="truncate font-mono">{siteAttribution}</span>
+        </div>
+      )}
+
+      {/* Banner when no image or site tiles are loaded */}
+      {!terrainImageConfig?.imageUrl && !terrainImageConfig?.tileUrlTemplate && !siteAttribution && (
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 max-w-lg w-[92%] bg-slate-950/95 border border-cyan-500/50 rounded-xl p-3 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-cyan-200 text-xs">
+              <ImageIcon className="w-4 h-4 shrink-0 text-cyan-400" />
               <span>
                 {language === 'ar'
-                  ? `أضف خريطة ${terrain.nameAr || terrain.name} من reforger.recoil.org مباشرة أو ارفع صورة خاصة:`
-                  : `Load ${terrain.name} map directly from reforger.recoil.org or upload custom image:`}
+                  ? `لا توجد صورة خريطة لـ ${terrain.nameAr || terrain.name}:`
+                  : `No map image loaded for ${terrain.name}:`}
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                onClick={onOpenRecoilMaps || onOpenUploadModal}
-                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 transition shadow"
-              >
-                <Globe className="w-3.5 h-3.5" />
-                <span>{language === 'ar' ? 'خرائط Recoil.org' : 'Recoil.org Maps'}</span>
-              </button>
-
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={onOpenUploadModal}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 transition"
+                className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 transition shadow"
               >
-                <ImageIcon className="w-3.5 h-3.5" />
-                <span>{language === 'ar' ? 'رفع صورة' : 'Upload'}</span>
+                <Upload className="w-3.5 h-3.5" />
+                <span>{language === 'ar' ? 'رفع صورة الخريطة' : 'Upload Map'}</span>
               </button>
+
+              {onOpenDiagnostics && (
+                <button
+                  onClick={onOpenDiagnostics}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-semibold flex items-center gap-1 transition border border-slate-700"
+                >
+                  <Activity className="w-3.5 h-3.5" />
+                  <span>{language === 'ar' ? 'تشخيص' : 'Diagnostics'}</span>
+                </button>
+              )}
 
               <button
                 onClick={onOpenHelpModal}
@@ -872,8 +932,8 @@ export const MortarMap: React.FC<MortarMapProps> = ({
         </div>
       )}
 
-      {/* Map Leaflet Container */}
-      <div ref={containerRef} className="w-full h-full z-0" />
+      {/* Map Leaflet Container (Explicit height and width) */}
+      <div ref={containerRef} className="w-full h-full min-h-[300px] z-0" />
 
       {/* Context Menu / Long Press Modal */}
       {contextMenu && (
@@ -885,7 +945,10 @@ export const MortarMap: React.FC<MortarMapProps> = ({
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="px-2 py-1 text-[11px] font-mono text-slate-400 border-b border-slate-800 mb-1 flex items-center justify-between" dir="ltr">
+          <div
+            className="px-2 py-1 text-[11px] font-mono text-slate-400 border-b border-slate-800 mb-1 flex items-center justify-between"
+            dir="ltr"
+          >
             <span>GRID: {to6DigitGrid(contextMenu.mapX, contextMenu.mapY)}</span>
             <span className="text-[10px] text-slate-500">
               {contextMenu.mapX}m, {contextMenu.mapY}m

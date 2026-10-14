@@ -34,6 +34,8 @@ import {
   TerrainImageConfig,
   getTerrainImage,
   getLocationLayers,
+  saveTerrainImage,
+  getDefaultBounds,
 } from './utils/imageStore';
 import { LocationLayer, TerrainConfig } from './types';
 
@@ -47,6 +49,7 @@ import { BallisticsEditorModal } from './components/BallisticsEditorModal';
 import { SessionManagerModal } from './components/SessionManagerModal';
 import { AboutModal } from './components/AboutModal';
 import { MapImageCalibrationModal } from './components/MapImageCalibrationModal';
+import { MapDiagnosticsModal } from './components/MapDiagnosticsModal';
 import { MapHelpModal } from './components/MapHelpModal';
 import { PoiEditorModal } from './components/PoiEditorModal';
 import { AccuracyTestModal } from './components/AccuracyTestModal';
@@ -54,6 +57,7 @@ import { ServersModal } from './components/ServersModal';
 import { TerrainSettingsModal } from './components/TerrainSettingsModal';
 import { LocationLayersModal } from './components/LocationLayersModal';
 import { EnfusionHelpModal } from './components/EnfusionHelpModal';
+import { ExternalMapsModal } from './components/ExternalMapsModal';
 import { translations } from './i18n/translations';
 import { Target as TargetIcon, List } from 'lucide-react';
 
@@ -138,6 +142,8 @@ export default function App() {
   });
 
   const handleSaveTerrainSize = (tId: TerrainId, newSize: number) => {
+    if (newSize <= 0 || isNaN(newSize)) return;
+
     setTerrainConfigs((prev) => {
       const updated = {
         ...prev,
@@ -157,13 +163,28 @@ export default function App() {
       return updated;
     });
 
+    const newBounds: [[number, number], [number, number]] = [[0, 0], [newSize, newSize]];
+
+    // If image exists and is using default bounds (uncalibrated), update its bounds immediately
+    if (terrainImageConfig && (!terrainImageConfig.isCalibrated || tId !== terrainId)) {
+      saveTerrainImage(tId, terrainImageConfig.imageBlob ?? null, {
+        bounds: newBounds,
+      }).then((saved) => {
+        if (terrainId === tId) {
+          setTerrainImageConfig(saved);
+        }
+      });
+    }
+
     if (tId === 'kolguyev' && terrainId !== 'kolguyev') {
       setTerrainId('kolguyev');
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.setView([Math.round(newSize / 2), Math.round(newSize / 2)], 2);
+        mapInstanceRef.current.fitBounds(newBounds);
+        mapInstanceRef.current.invalidateSize();
       }
     } else if (terrainId === tId && mapInstanceRef.current) {
-      mapInstanceRef.current.setView([Math.round(newSize / 2), Math.round(newSize / 2)], 2);
+      mapInstanceRef.current.fitBounds(newBounds);
+      mapInstanceRef.current.invalidateSize();
     }
   };
 
@@ -248,7 +269,9 @@ export default function App() {
   const [isLocationLayersModalOpen, setIsLocationLayersModalOpen] = useState(false);
   const [isEnfusionHelpModalOpen, setIsEnfusionHelpModalOpen] = useState(false);
   const [isMapImageModalOpen, setIsMapImageModalOpen] = useState(false);
-  const [mapImageModalTab, setMapImageModalTab] = useState<'recoil' | 'image' | 'folder' | 'url'>('recoil');
+  const [mapImageModalTab, setMapImageModalTab] = useState<'image' | 'folder' | 'url'>('image');
+  const [isDiagnosticsModalOpen, setIsDiagnosticsModalOpen] = useState(false);
+  const [isExternalMapsOpen, setIsExternalMapsOpen] = useState(false);
   const [isMapHelpModalOpen, setIsMapHelpModalOpen] = useState(false);
   const [isPoiModalOpen, setIsPoiModalOpen] = useState(false);
   const [prefillPoiCoords, setPrefillPoiCoords] = useState<{ x: number; y: number } | null>(null);
@@ -532,9 +555,11 @@ export default function App() {
           setIsTerrainSettingsModalOpen(true);
         }}
         onOpenMapImageModal={() => {
-          setMapImageModalTab('recoil');
+          setMapImageModalTab('image');
           setIsMapImageModalOpen(true);
         }}
+        onOpenDiagnostics={() => setIsDiagnosticsModalOpen(true)}
+        onOpenExternalMaps={() => setIsExternalMapsOpen(true)}
         onOpenPoiModal={() => {
           setPrefillPoiCoords(null);
           setIsPoiModalOpen(true);
@@ -575,11 +600,8 @@ export default function App() {
               setMapImageModalTab('image');
               setIsMapImageModalOpen(true);
             }}
-            onOpenRecoilMaps={() => {
-              setMapImageModalTab('recoil');
-              setIsMapImageModalOpen(true);
-            }}
             onOpenHelpModal={() => setIsMapHelpModalOpen(true)}
+            onOpenDiagnostics={() => setIsDiagnosticsModalOpen(true)}
             onAddPlaceAtCoords={handleOpenAddPoiAtCoords}
             mapInstanceRef={mapInstanceRef}
           />
@@ -703,9 +725,24 @@ export default function App() {
           setIsMapImageModalOpen(false);
           setIsEnfusionHelpModalOpen(true);
         }}
+        onOpenDiagnostics={() => {
+          setIsMapImageModalOpen(false);
+          setIsDiagnosticsModalOpen(true);
+        }}
       />
 
-      {/* 2. Map Image Preparation Help */}
+      {/* 2. Map Diagnostics Page / Modal ("تشخيص الخريطة") */}
+      <MapDiagnosticsModal
+        isOpen={isDiagnosticsModalOpen}
+        onClose={() => setIsDiagnosticsModalOpen(false)}
+        terrain={currentTerrain}
+        imageConfig={terrainImageConfig}
+        language={language}
+        mapInstance={mapInstanceRef.current}
+        onImageConfigChanged={setTerrainImageConfig}
+      />
+
+      {/* 3. Map Image Preparation Help */}
       <MapHelpModal
         isOpen={isMapHelpModalOpen}
         onClose={() => setIsMapHelpModalOpen(false)}
@@ -716,6 +753,14 @@ export default function App() {
       <EnfusionHelpModal
         isOpen={isEnfusionHelpModalOpen}
         onClose={() => setIsEnfusionHelpModalOpen(false)}
+        language={language}
+      />
+
+      {/* External Maps Modal (TacOps & Recoil) */}
+      <ExternalMapsModal
+        isOpen={isExternalMapsOpen}
+        onClose={() => setIsExternalMapsOpen(false)}
+        currentTerrain={terrainId}
         language={language}
       />
 
