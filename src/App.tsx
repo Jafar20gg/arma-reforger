@@ -602,6 +602,7 @@ export default function App() {
             }}
             onOpenHelpModal={() => setIsMapHelpModalOpen(true)}
             onOpenDiagnostics={() => setIsDiagnosticsModalOpen(true)}
+            onOpenExternalMaps={() => setIsExternalMapsOpen(true)}
             onAddPlaceAtCoords={handleOpenAddPoiAtCoords}
             mapInstanceRef={mapInstanceRef}
           />

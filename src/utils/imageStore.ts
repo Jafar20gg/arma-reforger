@@ -49,13 +49,24 @@ export async function fetchSiteTileMeta(terrainId: string): Promise<TerrainTileM
     if (!res.ok) return null;
     const data = await res.json();
     if (data && typeof data === 'object') {
+      const format = data.format || 'webp';
+      // Verify sample root tile exists and is not an empty/dummy 1x1 placeholder
+      try {
+        const sampleRes = await fetch(`./tiles/${terrainId}/0/0/0.${format}`, { cache: 'no-cache' });
+        if (!sampleRes.ok) return null;
+        const blob = await sampleRes.blob();
+        if (blob.size < 500) return null; // less than 500 bytes is a dummy pixel
+      } catch {
+        return null;
+      }
+
       return {
         terrain: data.terrain || terrainId,
         sizeMeters: Number(data.sizeMeters) || 12800,
         tileSize: Number(data.tileSize) || 256,
         minZoom: typeof data.minZoom === 'number' ? data.minZoom : 0,
         maxZoom: typeof data.maxZoom === 'number' ? data.maxZoom : 6,
-        format: data.format || 'webp',
+        format,
         yOrder: data.yOrder === 'tms' ? 'tms' : 'xyz',
         attribution: data.attribution || 'Map tiles generated with EnfusionMapMaker (APL-SA)',
       };

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Reforger Mortar Map (Standalone Offline Edition)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<style>
+:root{--bg:#070b14;--card:#0f172a;--border:#1e293b;--text:#f8fafc;--muted:#94a3b8;--accent:#38bdf8;--amber:#f59e0b;--red:#ef4444;--green:#22c55e}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{background:var(--card);border-bottom:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;z-index:20}
+header h1{font-size:15px;font-weight:700;display:flex;align-items:center;gap:6px;color:var(--amber)}
+.top-controls{display:flex;gap:6px;align-items:center}
+select,button,input{background:#1e293b;color:var(--text);border:1px solid #334155;border-radius:8px;padding:6px 10px;font-size:13px;cursor:pointer}
+button:hover{background:#334155}
+button.active{background:var(--amber);color:#020617;font-weight:700;border-color:var(--amber)}
+#main-view{flex:1;position:relative;width:100%;height:100%}
+#map{width:100%;height:100%;background:#030712;direction:ltr}
+.leaflet-container{background:#030712!important}
+.floating-panel{position:absolute;bottom:16px;left:16px;right:16px;max-width:540px;margin:0 auto;background:rgba(15,23,42,0.94);backdrop-filter:blur(10px);border:1px solid var(--border);border-radius:14px;padding:12px;z-index:1000;box-shadow:0 10px 25px rgba(0,0,0,0.5)}
+.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center}
+.calc-card{background:#0b1120;border:1px solid #1e293b;border-radius:10px;padding:8px 4px}
+.calc-val{font-size:18px;font-weight:700;font-family:monospace;direction:ltr;color:#38bdf8}
+.calc-lbl{font-size:11px;color:var(--muted);margin-top:2px}
+.ext-bar{position:absolute;top:12px;right:12px;z-index:1000;display:flex;flex-direction:column;gap:6px}
+.ext-btn{background:rgba(15,23,42,0.85);backdrop-filter:blur(6px);border:1px solid #334155;color:#f8fafc;padding:6px 12px;border-radius:8px;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+.ext-btn:hover{background:rgba(30,41,59,0.95);color:var(--accent)}
+.mode-toggle{position:absolute;top:12px;left:12px;z-index:1000;display:flex;gap:4px;background:rgba(15,23,42,0.85);padding:4px;border-radius:10px;border:1px solid #334155}
+.custom-pin{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;border:2px solid #fff;color:#fff;box-shadow:0 0 10px rgba(0,0,0,0.8)}
+.pin-m{background:#3b82f6}
+.pin-t{background:#ef4444}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>🎯</span> Reforger Mortar Map</h1>
+  <div class="top-controls">
+    <select id="terrain-select">
+      <option value="everon">Everon (12.8 km)</option>
+      <option value="arland">Arland (4.0 km)</option>
+      <option value="kolguyev">Kolguyev (12.8 km)</option>
+    </select>
+    <select id="mortar-type">
+      <option value="M252">M252 81mm (US)</option>
+      <option value="2B14">2B14 82mm (Soviet)</option>
+    </select>
+  </div>
+</header>
+
+<div id="main-view">
+  <div class="mode-toggle">
+    <button id="btn-mode-m" class="active">📍 ضع الهاون</button>
+    <button id="btn-mode-t">🎯 ضع الهدف</button>
+  </div>
+
+  <div class="ext-bar">
+    <a id="tacops-link" href="https://app.tacops.gg/m/everon" target="_blank" rel="noopener noreferrer" class="ext-btn">
+      🌐 فتح في TacOps
+    </a>
+    <a id="recoil-link" href="https://reforger.recoil.org/everon" target="_blank" rel="noopener noreferrer" class="ext-btn">
+      🗺️ فتح في Recoil
+    </a>
+  </div>
+
+  <div id="map"></div>
+
+  <div class="floating-panel">
+    <div class="calc-grid">
+      <div class="calc-card">
+        <div id="res-dist" class="calc-val">---</div>
+        <div class="calc-lbl">المسافة (متر)</div>
+      </div>
+      <div class="calc-card">
+        <div id="res-az" class="calc-val">---</div>
+        <div class="calc-lbl">الاتجاه (ميل/درجة)</div>
+      </div>
+      <div class="calc-card">
+        <div id="res-elev" class="calc-val" style="color:var(--amber)">---</div>
+        <div class="calc-lbl">زاوية الارتفاع</div>
+      </div>
+      <div class="calc-card">
+        <div id="res-chg" class="calc-val" style="color:var(--green)">---</div>
+        <div class="calc-lbl">الشحنة (Charge)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+const TERRAINS = {
+  everon: { size: 12800 },
+  arland: { size: 4000 },
+  kolguyev: { size: 12800 }
+};
+
+let currentTerrain = 'everon';
+let currentMode = 'mortar'; // 'mortar' or 'target'
+let mortarPos = { x: 6400, y: 6400 };
+let targetPos = null;
+
+// Initialize Leaflet Map
+const map = L.map('map', {
+  crs: L.CRS.Simple,
+  minZoom: -3,
+  maxZoom: 4,
+  zoomControl: false,
+  attributionControl: false
+});
+L.control.zoom({ position: 'topright' }).addTo(map);
+
+// Tactical Grid Canvas Layer
+const GridLayer = L.GridLayer.extend({
+  createTile: function(coords) {
+    const tile = document.createElement('canvas');
+    const tileSize = this.getTileSize();
+    tile.width = tileSize.x;
+    tile.height = tileSize.y;
+    const ctx = tile.getContext('2d');
+    if (!ctx) return tile;
+
+    const size = TERRAINS[currentTerrain].size;
+    const nw = map.unproject([coords.x * tileSize.x, coords.y * tileSize.y], coords.z);
+    const se = map.unproject([(coords.x + 1) * tileSize.x, (coords.y + 1) * tileSize.y], coords.z);
+
+    // Background
+    ctx.fillStyle = '#060a14';
+    ctx.fillRect(0, 0, tileSize.x, tileSize.y);
+
+    // Minor 100m grid
+    if (coords.z >= 0) {
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.08)';
+      ctx.lineWidth = 0.5;
+      const step = 100;
+      const startX = Math.floor(nw.lng / step) * step;
+      for (let x = startX; x <= se.lng; x += step) {
+        if (x < 0 || x > size) continue;
+        const pt = map.project([nw.lat, x], coords.z).subtract([coords.x * tileSize.x, coords.y * tileSize.y]);
+        ctx.beginPath(); ctx.moveTo(pt.x, 0); ctx.lineTo(pt.x, tileSize.y); ctx.stroke();
+      }
+      const startY = Math.floor(se.lat / step) * step;
+      for (let y = startY; y <= nw.lat; y += step) {
+        if (y < 0 || y > size) continue;
+        const pt = map.project([y, nw.lng], coords.z).subtract([coords.x * tileSize.x, coords.y * tileSize.y]);
+        ctx.beginPath(); ctx.moveTo(0, pt.y); ctx.lineTo(tileSize.x, pt.y); ctx.stroke();
+      }
+    }
+
+    // Major 1000m grid
+    ctx.strokeStyle = 'rgba(245, 158, 11, 0.25)';
+    ctx.lineWidth = 1;
+    const step1k = 1000;
+    const startX1k = Math.floor(nw.lng / step1k) * step1k;
+    for (let x = startX1k; x <= se.lng; x += step1k) {
+      if (x < 0 || x > size) continue;
+      const pt = map.project([nw.lat, x], coords.z).subtract([coords.x * tileSize.x, coords.y * tileSize.y]);
+      ctx.beginPath(); ctx.moveTo(pt.x, 0); ctx.lineTo(pt.x, tileSize.y); ctx.stroke();
+    }
+    const startY1k = Math.floor(se.lat / step1k) * step1k;
+    for (let y = startY1k; y <= nw.lat; y += step1k) {
+      if (y < 0 || y > size) continue;
+      const pt = map.project([y, nw.lng], coords.z).subtract([coords.x * tileSize.x, coords.y * tileSize.y]);
+      ctx.beginPath(); ctx.moveTo(0, pt.y); ctx.lineTo(tileSize.x, pt.y); ctx.stroke();
+    }
+
+    return tile;
+  }
+});
+const grid = new GridLayer().addTo(map);
+
+// Markers
+let mortarMarker = null;
+let targetMarker = null;
+let lineLayer = null;
+
+function updateMarkers() {
+  const size = TERRAINS[currentTerrain].size;
+  if (mortarMarker) map.removeLayer(mortarMarker);
+  if (targetMarker) map.removeLayer(targetMarker);
+  if (lineLayer) map.removeLayer(lineLayer);
+
+  if (mortarPos) {
+    const icon = L.divIcon({
+      className: '',
+      html: '<div class="custom-pin pin-m">M</div>',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    mortarMarker = L.marker([size - mortarPos.y, mortarPos.x], { icon }).addTo(map);
+  }
+
+  if (targetPos) {
+    const icon = L.divIcon({
+      className: '',
+      html: '<div class="custom-pin pin-t">T</div>',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+    targetMarker = L.marker([size - targetPos.y, targetPos.x], { icon }).addTo(map);
+
+    if (mortarPos) {
+      lineLayer = L.polyline([[size - mortarPos.y, mortarPos.x], [size - targetPos.y, targetPos.x]], {
+        color: '#f59e0b',
+        dashArray: '4, 4',
+        weight: 2
+      }).addTo(map);
+    }
+  }
+
+  calculateMortar();
+}
+
+function calculateMortar() {
+  if (!mortarPos || !targetPos) {
+    document.getElementById('res-dist').innerText = '---';
+    document.getElementById('res-az').innerText = '---';
+    document.getElementById('res-elev').innerText = '---';
+    document.getElementById('res-chg').innerText = '---';
+    return;
+  }
+
+  const dx = targetPos.x - mortarPos.x;
+  const dy = targetPos.y - mortarPos.y;
+  const dist = Math.round(Math.hypot(dx, dy));
+
+  // Azimuth in mils (6400) and deg
+  let rad = Math.atan2(dx, dy);
+  if (rad < 0) rad += 2 * Math.PI;
+  const deg = (rad * 180 / Math.PI).toFixed(1);
+  const mils = Math.round((rad / (2 * Math.PI)) * 6400);
+
+  document.getElementById('res-dist').innerText = dist + 'm';
+  document.getElementById('res-az').innerText = mils + ' ₥ (' + deg + '°)';
+
+  // Simplified Ballistic Table (M252 / 2B14 standard)
+  let chg = 0;
+  let elev = '---';
+  if (dist >= 70 && dist <= 450) {
+    chg = 0;
+    elev = Math.round(1550 - (dist - 70) * 1.8) + ' ₥';
+  } else if (dist <= 1900) {
+    chg = 1;
+    elev = Math.round(1550 - (dist - 450) * 0.48) + ' ₥';
+  } else if (dist <= 3150) {
+    chg = 2;
+    elev = Math.round(1550 - (dist - 1900) * 0.45) + ' ₥';
+  } else if (dist <= 4800) {
+    chg = 3;
+    elev = Math.round(1550 - (dist - 3150) * 0.43) + ' ₥';
+  } else if (dist <= 5600) {
+    chg = 4;
+    elev = Math.round(1520 - (dist - 4800) * 0.46) + ' ₥';
+  } else {
+    elev = 'خارج المدى';
+    chg = '-';
+  }
+
+  document.getElementById('res-elev').innerText = elev;
+  document.getElementById('res-chg').innerText = chg >= 0 ? 'CHG ' + chg : '---';
+}
+
+function resetView() {
+  const size = TERRAINS[currentTerrain].size;
+  map.fitBounds([[0, 0], [size, size]]);
+  document.getElementById('tacops-link').href = 'https://app.tacops.gg/m/' + currentTerrain;
+  document.getElementById('recoil-link').href = 'https://reforger.recoil.org/' + currentTerrain;
+  updateMarkers();
+}
+
+map.on('click', (e) => {
+  const size = TERRAINS[currentTerrain].size;
+  const x = Math.round(e.latlng.lng);
+  const y = Math.round(size - e.latlng.lat);
+  if (x < 0 || x > size || y < 0 || y > size) return;
+
+  if (currentMode === 'mortar') {
+    mortarPos = { x, y };
+  } else {
+    targetPos = { x, y };
+  }
+  updateMarkers();
+});
+
+document.getElementById('terrain-select').addEventListener('change', (e) => {
+  currentTerrain = e.target.value;
+  mortarPos = { x: TERRAINS[currentTerrain].size / 2, y: TERRAINS[currentTerrain].size / 2 };
+  targetPos = null;
+  grid.redraw();
+  resetView();
+});
+
+document.getElementById('btn-mode-m').addEventListener('click', () => {
+  currentMode = 'mortar';
+  document.getElementById('btn-mode-m').classList.add('active');
+  document.getElementById('btn-mode-t').classList.remove('active');
+});
+
+document.getElementById('btn-mode-t').addEventListener('click', () => {
+  currentMode = 'target';
+  document.getElementById('btn-mode-t').classList.add('active');
+  document.getElementById('btn-mode-m').classList.remove('active');
+});
+
+resetView();
+</script>
+</body>
+</html>

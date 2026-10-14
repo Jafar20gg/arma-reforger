@@ -56,6 +56,7 @@ interface MortarMapProps {
   onOpenUploadModal: () => void;
   onOpenHelpModal: () => void;
   onOpenDiagnostics?: () => void;
+  onOpenExternalMaps?: () => void;
   onAddPlaceAtCoords: (coords: { x: number; y: number }) => void;
   mapInstanceRef?: React.MutableRefObject<L.Map | null>;
 }
@@ -82,6 +83,7 @@ export const MortarMap: React.FC<MortarMapProps> = ({
   onOpenUploadModal,
   onOpenHelpModal,
   onOpenDiagnostics,
+  onOpenExternalMaps,
   onAddPlaceAtCoords,
   mapInstanceRef,
 }) => {
@@ -857,7 +859,7 @@ export const MortarMap: React.FC<MortarMapProps> = ({
         </div>
       </div>
 
-      {/* Floating Map Controls: "ملاءمة الخريطة" & "تشخيص الخريطة" */}
+      {/* Floating Map Controls: "ملاءمة الخريطة" & "تشخيص الخريطة" & "خرائط خارجية" */}
       <div className="absolute top-3 end-3 z-30 flex flex-col gap-1.5">
         <button
           onClick={handleFitToTerrain}
@@ -878,6 +880,17 @@ export const MortarMap: React.FC<MortarMapProps> = ({
             <span className="hidden sm:inline">{language === 'ar' ? 'التشخيص' : 'Diagnostics'}</span>
           </button>
         )}
+
+        {onOpenExternalMaps && (
+          <button
+            onClick={onOpenExternalMaps}
+            className="p-2 rounded-lg bg-slate-900/90 border border-emerald-500/40 hover:border-emerald-400 text-emerald-400 hover:text-white shadow-xl backdrop-blur-md flex items-center gap-1.5 text-xs font-semibold transition"
+            title={language === 'ar' ? 'خرائط اللعبة الخارجية (TacOps / Recoil)' : 'External Game Maps'}
+          >
+            <Compass className="w-4 h-4 text-emerald-400" />
+            <span className="hidden sm:inline">{language === 'ar' ? 'خرائط خارجية' : 'Ext Maps'}</span>
+          </button>
+        )}
       </div>
 
       {/* On-Map Attribution Text (EnfusionMapMaker / Site Tiles) */}
@@ -890,7 +903,7 @@ export const MortarMap: React.FC<MortarMapProps> = ({
 
       {/* Banner when no image or site tiles are loaded */}
       {!terrainImageConfig?.imageUrl && !terrainImageConfig?.tileUrlTemplate && !siteAttribution && (
-        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 max-w-lg w-[92%] bg-slate-950/95 border border-cyan-500/50 rounded-xl p-3 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-200">
+        <div className="absolute top-12 left-1/2 -translate-x-1/2 z-30 max-w-xl w-[92%] bg-slate-950/95 border border-cyan-500/50 rounded-xl p-3 shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-4 duration-200">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-cyan-200 text-xs">
               <ImageIcon className="w-4 h-4 shrink-0 text-cyan-400" />
@@ -901,7 +914,7 @@ export const MortarMap: React.FC<MortarMapProps> = ({
               </span>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <button
                 onClick={onOpenUploadModal}
                 className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 transition shadow"
@@ -909,6 +922,17 @@ export const MortarMap: React.FC<MortarMapProps> = ({
                 <Upload className="w-3.5 h-3.5" />
                 <span>{language === 'ar' ? 'رفع صورة الخريطة' : 'Upload Map'}</span>
               </button>
+
+              {onOpenExternalMaps && (
+                <button
+                  onClick={onOpenExternalMaps}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5 transition shadow"
+                  title={language === 'ar' ? 'فتح خريطة اللعبة في TacOps أو Recoil' : 'Open in TacOps or Recoil'}
+                >
+                  <Compass className="w-3.5 h-3.5 text-emerald-300" />
+                  <span>{language === 'ar' ? 'خرائط اللعبة' : 'Game Maps'}</span>
+                </button>
+              )}
 
               {onOpenDiagnostics && (
                 <button
