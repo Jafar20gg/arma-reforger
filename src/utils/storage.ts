@@ -12,6 +12,10 @@ import {
   DEFAULT_INTERFACE_VISIBILITY,
   WindSettings,
   DEFAULT_WIND_SETTINGS,
+  DisplayPreferences,
+  DEFAULT_DISPLAY_PREFERENCES,
+  VisualCustomizationSettings,
+  DEFAULT_VISUAL_CUSTOMIZATION,
 } from '../types/settings';
 
 export const STORAGE_SCHEMA_VERSION = 3;
@@ -30,6 +34,8 @@ export interface AppPersistentState {
   appearance: MapAppearanceSettings;
   interfaceVisibility: InterfaceVisibilitySettings;
   windSettings: WindSettings;
+  displayPreferences: DisplayPreferences;
+  visualCustomization: VisualCustomizationSettings;
   shooterData: ShooterData;
   customProfiles: CustomMortarProfile[];
   landmarkOverrides: Record<string, { xMeters: number; yMeters: number; altitudeMeters: number; isCustomized: boolean; updatedAt: number }>;
@@ -97,6 +103,8 @@ export const DEFAULT_STATE: AppPersistentState = {
   appearance: DEFAULT_APPEARANCE,
   interfaceVisibility: DEFAULT_INTERFACE_VISIBILITY,
   windSettings: DEFAULT_WIND_SETTINGS,
+  displayPreferences: DEFAULT_DISPLAY_PREFERENCES,
+  visualCustomization: DEFAULT_VISUAL_CUSTOMIZATION,
   shooterData: DEFAULT_SHOOTER_DATA,
   customProfiles: [],
 };
@@ -135,6 +143,14 @@ export function loadPersistentState(): AppPersistentState {
       windSettings: {
         ...DEFAULT_WIND_SETTINGS,
         ...(parsed.windSettings && typeof parsed.windSettings === 'object' ? parsed.windSettings : {}),
+      },
+      displayPreferences: {
+        ...DEFAULT_DISPLAY_PREFERENCES,
+        ...(parsed.displayPreferences && typeof parsed.displayPreferences === 'object' ? parsed.displayPreferences : {}),
+      },
+      visualCustomization: {
+        ...DEFAULT_VISUAL_CUSTOMIZATION,
+        ...(parsed.visualCustomization && typeof parsed.visualCustomization === 'object' ? parsed.visualCustomization : {}),
       },
       shooterData: {
         ...DEFAULT_SHOOTER_DATA,

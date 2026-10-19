@@ -3,6 +3,8 @@
  * Source: In-Game Ballistic Table Gadget & Official Transcriptions
  */
 
+import { WeaponType } from '../types/mortar';
+
 export interface BallisticRow {
   range: number;        // Target distance in meters
   elevation: number;    // Mortar tube elevation in mils
@@ -32,10 +34,16 @@ export interface ShellType {
 }
 
 export interface WeaponData {
-  id: string;
+  id: WeaponType;
   name: string;
+  nameAr: string;
   calibre: string;
   milsPerCircle: number;
+  minElevationMils: number;
+  maxElevationMils: number;
+  minElevationDeg: number;
+  maxElevationDeg: number;
+  standard: 'NATO' | 'Warsaw Pact';
   defaultRounds: ShellType[];
 }
 
@@ -43,8 +51,14 @@ export const BALLISTIC_DATA: Record<'m252' | 'b2b14', WeaponData> = {
   m252: {
     id: 'm252',
     name: 'M252 81mm Mortar',
+    nameAr: 'هاون M252 عيار 81 ملم',
     calibre: '81mm',
     milsPerCircle: 6400,
+    minElevationMils: 800,
+    maxElevationMils: 1515,
+    minElevationDeg: 45.0,
+    maxElevationDeg: 85.2,
+    standard: 'NATO',
     defaultRounds: [
       {
         id: 'm821-he',
@@ -220,8 +234,14 @@ export const BALLISTIC_DATA: Record<'m252' | 'b2b14', WeaponData> = {
   b2b14: {
     id: 'b2b14',
     name: '2B14 Podnos 82mm Mortar',
+    nameAr: 'هاون 2B14 بودنس عيار 82 ملم',
     calibre: '82mm',
     milsPerCircle: 6000,
+    minElevationMils: 748,
+    maxElevationMils: 1415,
+    minElevationDeg: 44.9,
+    maxElevationDeg: 84.9,
+    standard: 'Warsaw Pact',
     defaultRounds: [
       {
         id: 'o-832du',

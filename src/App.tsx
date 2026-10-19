@@ -26,7 +26,11 @@ import {
   InterfaceVisibilitySettings,
   DEFAULT_INTERFACE_VISIBILITY,
   WindSettings,
-  DEFAULT_WIND_SETTINGS
+  DEFAULT_WIND_SETTINGS,
+  DisplayPreferences,
+  DEFAULT_DISPLAY_PREFERENCES,
+  VisualCustomizationSettings,
+  DEFAULT_VISUAL_CUSTOMIZATION,
 } from './types/settings';
 import { TacticalMap } from './components/TacticalMap';
 import { BallisticPanel } from './components/BallisticPanel';
@@ -119,6 +123,12 @@ export default function App() {
   );
   const [windSettings, setWindSettings] = useState<WindSettings>(
     () => persistedState.windSettings || DEFAULT_WIND_SETTINGS
+  );
+  const [displayPreferences, setDisplayPreferences] = useState<DisplayPreferences>(
+    () => persistedState.displayPreferences || DEFAULT_DISPLAY_PREFERENCES
+  );
+  const [visualCustomization, setVisualCustomization] = useState<VisualCustomizationSettings>(
+    () => persistedState.visualCustomization || DEFAULT_VISUAL_CUSTOMIZATION
   );
 
   const pushUndo = useCallback((current: LayoutProfile) => {
@@ -417,6 +427,12 @@ export default function App() {
     if (imported.windSettings) {
       setWindSettings(imported.windSettings);
     }
+    if (imported.displayPreferences) {
+      setDisplayPreferences(imported.displayPreferences);
+    }
+    if (imported.visualCustomization) {
+      setVisualCustomization(imported.visualCustomization);
+    }
   };
 
   const handleResetDefaults = () => {
@@ -425,6 +441,8 @@ export default function App() {
     setLandmarkOverrides({});
     setInterfaceVisibility(DEFAULT_INTERFACE_VISIBILITY);
     setWindSettings(DEFAULT_WIND_SETTINGS);
+    setDisplayPreferences(DEFAULT_DISPLAY_PREFERENCES);
+    setVisualCustomization(DEFAULT_VISUAL_CUSTOMIZATION);
     handleRestoreState(DEFAULT_STATE);
   };
 
@@ -442,6 +460,8 @@ export default function App() {
     landmarkOverrides,
     interfaceVisibility,
     windSettings,
+    displayPreferences,
+    visualCustomization,
     shooterData: persistedState.shooterData,
     customProfiles: persistedState.customProfiles,
   }), [
@@ -457,6 +477,8 @@ export default function App() {
     landmarkOverrides,
     interfaceVisibility,
     windSettings,
+    displayPreferences,
+    visualCustomization,
     persistedState.shooterData,
     persistedState.customProfiles,
   ]);
@@ -887,6 +909,10 @@ export default function App() {
         onVisibilityChange={setInterfaceVisibility}
         appearance={appearance}
         onAppearanceChange={setAppearance}
+        displayPreferences={displayPreferences}
+        onDisplayPreferencesChange={setDisplayPreferences}
+        visualCustomization={visualCustomization}
+        onVisualCustomizationChange={setVisualCustomization}
         weaponType={weaponType}
         onWeaponChange={handleWeaponChange}
         projectileId={projectileId}

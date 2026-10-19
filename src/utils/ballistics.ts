@@ -10,6 +10,32 @@ export interface ComputeSolutionOptions {
   preferredCharge?: number;
 }
 
+/**
+ * Convert mils to degrees based on the weapon's angular circle convention.
+ * NATO (M252): 6400 mils = 360 degrees => degrees = mils * 360 / 6400
+ * Warsaw Pact (2B14): 6000 mils = 360 degrees => degrees = mils * 360 / 6000
+ */
+export function milsToDegrees(mils: number, weaponType: WeaponType): number {
+  const milsPerCircle = weaponType === 'b2b14' ? 6000 : 6400;
+  return Number(((mils * 360) / milsPerCircle).toFixed(1));
+}
+
+/**
+ * Convert decimal degrees to mils based on the weapon's angular circle convention.
+ */
+export function degreesToMils(degrees: number, weaponType: WeaponType): number {
+  const milsPerCircle = weaponType === 'b2b14' ? 6000 : 6400;
+  return Math.round((degrees * milsPerCircle) / 360);
+}
+
+/**
+ * Verify whether an elevation angle in mils falls within the weapon's physical tube elevation limits.
+ */
+export function isElevationWithinLimits(elevationMils: number, weaponType: WeaponType): boolean {
+  const weapon = BALLISTIC_DATA[weaponType === 'b2b14' ? 'b2b14' : 'm252'];
+  return elevationMils >= weapon.minElevationMils && elevationMils <= weapon.maxElevationMils;
+}
+
 function interpolateRow(r1: BallisticRow, r2: BallisticRow, targetRange: number): BallisticRow {
   if (r1.range === r2.range) return r1;
   const factor = (targetRange - r1.range) / (r2.range - r1.range);
@@ -73,15 +99,23 @@ export function computeFireSolution(options: ComputeSolutionOptions): FireSoluti
 
     const heightCorrectionMils = (row.dElev ?? 0) * (deltaAltitude / 100);
     const correctedElev = Math.round(row.elevation - heightCorrectionMils);
-    const elevDeg = Number(((correctedElev * 360) / weapon.milsPerCircle).toFixed(1));
+    const elevDeg = milsToDegrees(correctedElev, weaponType);
+
+    const isWithinLimits = correctedElev >= weapon.minElevationMils && correctedElev <= weapon.maxElevationMils;
 
     return {
       rings: charge.rings,
       elevationMils: correctedElev,
       elevationDegrees: elevDeg,
       timeOfFlightSec: row.tof,
-      inRange: true,
+      inRange: isWithinLimits,
       row,
+      elevationOutOfLimits: !isWithinLimits,
+      outOfLimitsReason: !isWithinLimits
+        ? correctedElev < weapon.minElevationMils
+          ? `Elevation ${correctedElev} MIL (${elevDeg}°) is below minimum ${weapon.minElevationMils} MIL (${weapon.minElevationDeg}°)`
+          : `Elevation ${correctedElev} MIL (${elevDeg}°) exceeds maximum ${weapon.maxElevationMils} MIL (${weapon.maxElevationDeg}°)`
+        : undefined,
     };
   });
 
@@ -96,9 +130,9 @@ export function computeFireSolution(options: ComputeSolutionOptions): FireSoluti
   const globalMax = Math.max(...shell.charges.map(c => c.maxRange));
 
   if (!chosen || !chosen.row) {
-    let status: 'too-close' | 'too-far' | 'no-solution' = 'no-solution';
+    let status: 'too-close' | 'too-far' | 'elevation-out-of-limits' | 'no-solution' = 'no-solution';
     let warning = `Target is out of range (${globalMin}m - ${globalMax}m)`;
-    let warningAr = `الهدف خارج المدى (${globalMin}م - ${globalMax}م)`;
+    let warningAr = `الهدف خارج مدى الهاون (${globalMin}م - ${globalMax}م)`;
 
     if (distance < globalMin) {
       status = 'too-close';
@@ -108,6 +142,14 @@ export function computeFireSolution(options: ComputeSolutionOptions): FireSoluti
       status = 'too-far';
       warning = `Target exceeds maximum range (${Math.round(distance)}m > maximum ${globalMax}m)`;
       warningAr = `الهدف يتجاوز أقصى مدى (${Math.round(distance)}م > أقصى مدى ${globalMax}م)`;
+    } else {
+      // Distance is in table bounds, but height delta made all elevations exceed safe limits
+      const anyOutOfLimits = chargeSolutions.find(c => c.elevationOutOfLimits);
+      if (anyOutOfLimits) {
+        status = 'elevation-out-of-limits';
+        warning = `Required tube elevation exceeds physical limits (${weapon.minElevationMils}-${weapon.maxElevationMils} MIL / ${weapon.minElevationDeg}°-${weapon.maxElevationDeg}°)`;
+        warningAr = `زاوية الارتفاع المطلوبة تتجاوز الحدود الآمنة لأنبوب الهاون (${weapon.minElevationMils}-${weapon.maxElevationMils} مليم / ${weapon.minElevationDeg}°-${weapon.maxElevationDeg}°)`;
+      }
     }
 
     return {
@@ -131,11 +173,13 @@ export function computeFireSolution(options: ComputeSolutionOptions): FireSoluti
         elevationDegrees: c.elevationDegrees,
         timeOfFlightSec: c.timeOfFlightSec,
         inRange: c.inRange,
+        elevationOutOfLimits: c.elevationOutOfLimits,
+        outOfLimitsReason: c.outOfLimitsReason,
       })),
     };
   }
 
-  const chosenElevDeg = Number(((chosen.elevationMils * 360) / weapon.milsPerCircle).toFixed(1));
+  const chosenElevDeg = milsToDegrees(chosen.elevationMils, weaponType);
 
   return {
     weaponId: weaponType,
@@ -158,6 +202,8 @@ export function computeFireSolution(options: ComputeSolutionOptions): FireSoluti
       elevationDegrees: c.elevationDegrees,
       timeOfFlightSec: c.timeOfFlightSec,
       inRange: c.inRange,
+      elevationOutOfLimits: c.elevationOutOfLimits,
+      outOfLimitsReason: c.outOfLimitsReason,
     })),
   };
 }

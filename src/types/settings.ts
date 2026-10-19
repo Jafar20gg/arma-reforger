@@ -57,3 +57,57 @@ export const DEFAULT_WIND_SETTINGS: WindSettings = {
   directionDeg: 270,
   enabled: false,
 };
+
+export type AngleDisplayUnit = 'both' | 'mils' | 'degrees';
+export type DistanceDisplayUnit = 'meters' | 'kilometers' | 'both';
+export type AppTheme = 'dark-tactical' | 'high-contrast' | 'night-vision' | 'desert-tan';
+
+export interface DisplayPreferences {
+  angleUnit: AngleDisplayUnit;
+  distanceUnit: DistanceDisplayUnit;
+  decimalPrecision: number;
+  showSlantDistance: boolean;
+  showMaxOrdinate: boolean;
+  showAngleOfFall: boolean;
+  showFlightTime: boolean;
+  showHeightDifference: boolean;
+  markerLabelMode: 'full' | 'grid-only' | 'name-only';
+}
+
+export interface VisualCustomizationSettings {
+  theme: AppTheme;
+  accentColor: string;
+  mortarMarkerColor: string;
+  targetMarkerColor: string;
+  distanceLineColor: string;
+  rangeRingMinColor: string;
+  rangeRingMaxColor: string;
+  fontFamily: 'JetBrains Mono' | 'Chakra Petch' | 'system-ui';
+  fontSize: 'small' | 'medium' | 'large';
+  enableAnimations: boolean;
+}
+
+export const DEFAULT_DISPLAY_PREFERENCES: DisplayPreferences = {
+  angleUnit: 'both',
+  distanceUnit: 'meters',
+  decimalPrecision: 1,
+  showSlantDistance: false,
+  showMaxOrdinate: true,
+  showAngleOfFall: true,
+  showFlightTime: true,
+  showHeightDifference: true,
+  markerLabelMode: 'full',
+};
+
+export const DEFAULT_VISUAL_CUSTOMIZATION: VisualCustomizationSettings = {
+  theme: 'dark-tactical',
+  accentColor: '#f59e0b',
+  mortarMarkerColor: '#ef4444',
+  targetMarkerColor: '#3b82f6',
+  distanceLineColor: '#f59e0b',
+  rangeRingMinColor: '#ef4444',
+  rangeRingMaxColor: '#10b981',
+  fontFamily: 'JetBrains Mono',
+  fontSize: 'medium',
+  enableAnimations: true,
+};

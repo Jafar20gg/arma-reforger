@@ -88,7 +88,7 @@ export interface FireSolution {
   maxOrdinateMeters?: number;
   angleOfFallDeg?: number;
   inRange: boolean;
-  status: 'valid' | 'too-close' | 'too-far' | 'no-solution';
+  status: 'valid' | 'too-close' | 'too-far' | 'elevation-out-of-limits' | 'no-solution';
   warningMessage?: string;
   warningMessageAr?: string;
   availableCharges: {
@@ -97,6 +97,8 @@ export interface FireSolution {
     elevationDegrees: number;
     timeOfFlightSec: number;
     inRange: boolean;
+    elevationOutOfLimits?: boolean;
+    outOfLimitsReason?: string;
   }[];
   calibrationApplied?: boolean;
 }
