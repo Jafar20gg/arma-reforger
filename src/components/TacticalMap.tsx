@@ -456,7 +456,14 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       resizeObserver.observe(mapContainerRef.current);
     }
 
+    const initTimer = setTimeout(() => {
+      if (leafletMapRef.current) {
+        leafletMapRef.current.invalidateSize();
+      }
+    }, 150);
+
     return () => {
+      clearTimeout(initTimer);
       resizeObserver.disconnect();
       map.remove();
       leafletMapRef.current = null;
