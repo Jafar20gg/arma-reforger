@@ -9,7 +9,7 @@ import {
   Sliders,
   Flame,
   Edit3,
-  MoreVertical
+  Settings,
 } from 'lucide-react';
 import { MAPS, getMapWithOverrides } from './data/mapsData';
 import {
@@ -37,7 +37,6 @@ import { BallisticPanel } from './components/BallisticPanel';
 import { TargetManager } from './components/TargetManager';
 import { CoordinateInputModal } from './components/CoordinateInputModal';
 import { LandmarkEditModal } from './components/LandmarkEditModal';
-import { Sidebar } from './components/Sidebar';
 import { SettingsModal } from './components/SettingsModal';
 import { UICustomizerToolbar } from './components/UICustomizerToolbar';
 import { CustomizableElementWrapper } from './components/CustomizableElementWrapper';
@@ -114,7 +113,6 @@ export default function App() {
 
   const [coordModalType, setCoordModalType] = useState<'mortar' | 'target' | null>(null);
   const [editingPoi, setEditingPoi] = useState<MapPOI | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [mobileTab, setMobileTab] = useState<'map' | 'hud'>('map');
 
@@ -596,69 +594,58 @@ export default function App() {
               </div>
             )}
 
-            <div className="flex items-center gap-1 sm:gap-1.5">
-              <div className="flex items-center gap-1 bg-neutral-950 border border-neutral-700/80 rounded-lg px-1.5 py-0.5">
-                <Layers className="w-3 h-3 text-amber-400 shrink-0" />
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* Map Title and Selected Region Name */}
+              <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 bg-neutral-950 border border-neutral-700/80 rounded-lg text-xs font-tactical shadow-inner">
+                <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <div className="flex items-center gap-1">
+                  <span className="font-bold text-white text-xs sm:text-sm">
+                    {lang === 'ar' ? currentMap.nameAr : currentMap.name}
+                  </span>
+                  <span className="text-neutral-500 font-mono text-[10px]">|</span>
+                  <span className="text-amber-300 font-mono text-[10px] sm:text-[11px] truncate max-w-[110px] sm:max-w-none">
+                    {currentMap.subTitle}
+                  </span>
+                </div>
                 <select
                   value={selectedMapId}
                   onChange={e => handleMapChange(e.target.value)}
-                  className="bg-transparent text-[11px] sm:text-xs font-tactical font-semibold text-neutral-200 focus:outline-none cursor-pointer max-w-[90px] sm:max-w-none truncate"
+                  className="ml-1 bg-neutral-900 text-neutral-300 border border-neutral-700 rounded px-1.5 py-0.5 text-[11px] font-tactical cursor-pointer focus:outline-none"
+                  title="Switch Theater Map"
                 >
                   {Object.values(MAPS).map(m => (
                     <option key={m.id} value={m.id} className="bg-neutral-900 text-neutral-100">
-                      {lang === 'ar' ? m.nameAr : m.name} ({m.subTitle.split(' ')[0]})
+                      {lang === 'ar' ? m.nameAr : m.name}
                     </option>
                   ))}
                 </select>
               </div>
 
+              {/* Language Selector */}
               <button
                 type="button"
                 onClick={() => setLang(lang === 'en' ? 'ar' : 'en')}
-                className="flex items-center gap-1 px-2 py-0.5 bg-neutral-950 border border-neutral-700/80 rounded-lg text-[11px] font-tactical font-bold text-neutral-300 hover:text-white hover:border-amber-500 transition shadow-sm"
+                className="flex items-center gap-1 px-2 py-1 bg-neutral-950 border border-neutral-700/80 rounded-lg text-xs font-tactical font-bold text-neutral-300 hover:text-white hover:border-amber-500 transition shadow-sm"
                 title="Toggle Arabic / English"
               >
-                <Globe className="w-3 h-3 text-amber-400 shrink-0" />
+                <Globe className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span className="hidden sm:inline">{lang === 'en' ? 'العربية' : 'English'}</span>
               </button>
 
+              {/* ONE Unified Settings Center Button */}
               <button
                 type="button"
-                onClick={() => setIsSettingsOpen(true)}
-                className="flex items-center gap-1 px-2 py-0.5 bg-amber-600 hover:bg-amber-500 text-neutral-950 border border-amber-400 rounded-lg text-[11px] font-tactical font-bold transition shadow-md shadow-amber-950/60 ring-1 ring-amber-400"
+                onClick={() => setIsSettingsOpen(prev => !prev)}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-tactical font-bold transition shadow-md ${
+                  isSettingsOpen
+                    ? 'bg-amber-500 text-neutral-950 ring-2 ring-amber-300 border border-amber-300 shadow-amber-950/80'
+                    : 'bg-amber-600 hover:bg-amber-500 text-neutral-950 border border-amber-400 ring-1 ring-amber-400 shadow-amber-950/60'
+                }`}
                 title={t.settings}
               >
-                <MoreVertical className="w-3 h-3 stroke-[2.5]" />
-                <span className="hidden sm:inline">{t.settings}</span>
+                <Settings className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>{t.settings}</span>
               </button>
-
-              {interfaceVisibility.showAdvancedControls && (
-                <button
-                  type="button"
-                  onClick={() => setIsCustomizing(prev => !prev)}
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-tactical font-bold transition shadow-sm border ${
-                    isCustomizing
-                      ? 'bg-amber-500 text-neutral-950 border-amber-300 ring-2 ring-amber-400'
-                      : 'bg-neutral-950 border-neutral-700/80 text-amber-400 hover:text-white hover:border-amber-500'
-                  }`}
-                  title="Customize UI Layout"
-                >
-                  <Edit3 className="w-3 h-3" />
-                  <span className="hidden sm:inline">{lang === 'ar' ? 'تخصيص' : 'Customize UI'}</span>
-                </button>
-              )}
-
-              {interfaceVisibility.showAdvancedControls && (
-                <button
-                  type="button"
-                  onClick={() => setIsSidebarOpen(true)}
-                  className="flex items-center gap-1 px-2 py-0.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 font-tactical font-bold rounded-lg text-[11px] transition border border-neutral-700"
-                  title={t.sidebarTitle}
-                >
-                  <Sliders className="w-3 h-3 stroke-[2.5]" />
-                  <span className="hidden sm:inline">{lang === 'ar' ? 'العمليات' : 'Menu'}</span>
-                </button>
-              )}
             </div>
           </header>
         </CustomizableElementWrapper>
@@ -868,43 +855,13 @@ export default function App() {
         )}
       </main>
 
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-        lang={lang}
-        onLanguageChange={setLang}
-        selectedMapId={selectedMapId}
-        onMapChange={handleMapChange}
-        appearance={appearance}
-        onAppearanceChange={setAppearance}
-        weaponType={weaponType}
-        onWeaponChange={handleWeaponChange}
-        projectileId={projectileId}
-        onProjectileChange={setProjectileId}
-        savedTargets={savedTargets}
-        onSelectTarget={handleSelectSavedTarget}
-        onDeleteTarget={handleDeleteTarget}
-        mortar={mortar}
-        target={target}
-        fullState={fullState}
-        landmarkOverrides={landmarkOverrides}
-        customizationState={customizationState}
-        onSelectLayoutProfile={handleSelectProfile}
-        onToggleCustomizer={() => {
-          setIsSidebarOpen(false);
-          setIsCustomizing(true);
-        }}
-        onResetLandmarkOverride={handleResetLandmarkOverride}
-        onClearAllLandmarkOverrides={handleClearAllLandmarkOverrides}
-        onRestoreState={handleRestoreState}
-        onResetDefaults={handleResetDefaults}
-      />
-
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         lang={lang}
         onLanguageChange={setLang}
+        selectedMapId={selectedMapId}
+        onMapChange={handleMapChange}
         visibility={interfaceVisibility}
         onVisibilityChange={setInterfaceVisibility}
         appearance={appearance}
@@ -921,12 +878,26 @@ export default function App() {
         onChargeChange={setPreferredCharge}
         windSettings={windSettings}
         onWindChange={setWindSettings}
+        mortar={mortar}
+        onMortarChange={setMortar}
+        target={target}
+        onTargetChange={setTarget}
+        savedTargets={savedTargets}
+        onSelectTarget={handleSelectSavedTarget}
+        onDeleteTarget={handleDeleteTarget}
+        onAddTarget={newTrp => setSavedTargets(prev => [newTrp, ...prev])}
         solution={solution}
-        selectedMapId={selectedMapId}
-        onMapChange={handleMapChange}
-        onResetAppearance={() => setAppearance(DEFAULT_APPEARANCE)}
-        onResetInterface={() => setInterfaceVisibility(DEFAULT_INTERFACE_VISIBILITY)}
+        landmarkOverrides={landmarkOverrides}
+        onResetLandmarkOverride={handleResetLandmarkOverride}
+        onClearAllLandmarkOverrides={handleClearAllLandmarkOverrides}
+        customizationState={customizationState}
+        onSelectLayoutProfile={handleSelectProfile}
+        onLaunchCustomizer={() => setIsCustomizing(true)}
         onRestoreDefaultLayout={handleResetLayout}
+        fullState={fullState}
+        onRestoreState={handleRestoreState}
+        onResetDefaults={handleResetDefaults}
+        onOpenCoordModal={type => setCoordModalType(type)}
       />
 
       {coordModalType && (

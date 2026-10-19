@@ -145,6 +145,13 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   const targetMarkerRef = useRef<L.Marker | null>(null);
   const trajectoryLineRef = useRef<L.Polyline | null>(null);
   const distanceBadgeRef = useRef<L.Marker | null>(null);
+  const mortarRef = useRef<WorldPoint>(mortar);
+  mortarRef.current = mortar;
+  const targetRef = useRef<WorldPoint>(target);
+  targetRef.current = target;
+  const mapDefRef = useRef<MapDefinition>(mapDef);
+  mapDefRef.current = mapDef;
+  const isDraggingMarkerRef = useRef(false);
 
   const [mapLoading, setMapLoading] = useState(true);
   const [showErrorBanner, setShowErrorBanner] = useState(false);
@@ -407,10 +414,19 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       zIndexOffset: 1000,
     }).addTo(map);
 
+    mortarMarker.on('dragstart', () => {
+      isDraggingMarkerRef.current = true;
+    });
     mortarMarker.on('drag', () => {
       const pos = mortarMarker.getLatLng();
-      const worldPos = latLngToWorld({ lat: pos.lat, lng: pos.lng }, mapDef);
-      onMortarChange({ ...mortar, xMeters: worldPos.xMeters, yMeters: worldPos.yMeters });
+      const worldPos = latLngToWorld({ lat: pos.lat, lng: pos.lng }, mapDefRef.current);
+      onMortarChange({ ...mortarRef.current, xMeters: worldPos.xMeters, yMeters: worldPos.yMeters });
+    });
+    mortarMarker.on('dragend', () => {
+      isDraggingMarkerRef.current = false;
+      const pos = mortarMarker.getLatLng();
+      const worldPos = latLngToWorld({ lat: pos.lat, lng: pos.lng }, mapDefRef.current);
+      onMortarChange({ ...mortarRef.current, xMeters: worldPos.xMeters, yMeters: worldPos.yMeters });
     });
     mortarMarkerRef.current = mortarMarker;
 
@@ -421,10 +437,19 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
       zIndexOffset: 1000,
     }).addTo(map);
 
+    targetMarker.on('dragstart', () => {
+      isDraggingMarkerRef.current = true;
+    });
     targetMarker.on('drag', () => {
       const pos = targetMarker.getLatLng();
-      const worldPos = latLngToWorld({ lat: pos.lat, lng: pos.lng }, mapDef);
-      onTargetChange({ ...target, xMeters: worldPos.xMeters, yMeters: worldPos.yMeters });
+      const worldPos = latLngToWorld({ lat: pos.lat, lng: pos.lng }, mapDefRef.current);
+      onTargetChange({ ...targetRef.current, xMeters: worldPos.xMeters, yMeters: worldPos.yMeters });
+    });
+    targetMarker.on('dragend', () => {
+      isDraggingMarkerRef.current = false;
+      const pos = targetMarker.getLatLng();
+      const worldPos = latLngToWorld({ lat: pos.lat, lng: pos.lng }, mapDefRef.current);
+      onTargetChange({ ...targetRef.current, xMeters: worldPos.xMeters, yMeters: worldPos.yMeters });
     });
     targetMarkerRef.current = targetMarker;
 
@@ -601,14 +626,14 @@ export const TacticalMap: React.FC<TacticalMapProps> = ({
   }, [mortar, mapDef, weaponType, solution, visibility]);
 
   useEffect(() => {
-    if (!leafletMapRef.current || !mortarMarkerRef.current) return;
+    if (!leafletMapRef.current || !mortarMarkerRef.current || isDraggingMarkerRef.current) return;
     const latLng = worldToLatLng(mortar, mapDef);
     mortarMarkerRef.current.setLatLng([latLng.lat, latLng.lng]);
     mortarMarkerRef.current.setIcon(createMortarIcon());
   }, [mortar, mapDef, createMortarIcon]);
 
   useEffect(() => {
-    if (!leafletMapRef.current || !targetMarkerRef.current) return;
+    if (!leafletMapRef.current || !targetMarkerRef.current || isDraggingMarkerRef.current) return;
     const latLng = worldToLatLng(target, mapDef);
     targetMarkerRef.current.setLatLng([latLng.lat, latLng.lng]);
     targetMarkerRef.current.setIcon(createTargetIcon());
