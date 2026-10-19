@@ -1,98 +1,71 @@
-# خريطة هاون ريفورجر | Reforger Mortar Map
+# نظام التحكم في نيران الهاون – Arma Reforger | Fire Control System (FCS)
 
-[English](#english) | [العربية](#العربية)
+[العربية](#العربية) | [English](#english)
 
 ---
 
 <a name="العربية"></a>
 ## العربية 🇸🇦
 
-تطبيق ويب تكتيكي مجاني وخفيف يعمل بالكامل داخل المتصفح (Static Web App) بدون خوادم، مخصص لحساب إحداثيات الهاون والرمي الدقيق للعبة **Arma Reforger**. تم تصميمه بواجهة عربية كاملة بنظام RTL مع إمكانية التبديل إلى الإنجليزية بضغطة زر، ومتوافق مع النشر المباشر والمجاني على GitHub Pages.
+تطبيق ويب تكتيكي احترافي مجاني وخفيف يعمل بالكامل داخل المتصفح (Static Web App) بدون خوادم، مخصص لحساب إحداثيات الهاون والرمي الدقيق للعبة **Arma Reforger**. تم تصميمه بواجهة عربية كاملة بنظام RTL مع إمكانية التبديل إلى الإنجليزية بضغطة زر، ومتوافق تماماً مع النشر التلقائي عبر GitHub Actions على **GitHub Pages**.
 
-### المميزات والتحديثات الرئيسية:
+### المميزات الرئيسية:
+1. **الخرائط التكتيكية التفاعلية:**
+   - دعم خرائط مسارح العمليات الأصلية للعبة: **Everon (إيفرون)**، **Arland (آرلاند)**، و **Kolguyev (كولغويف)** بإحداثيات مطابقة تماماً لمحرك Enfusion (1:1).
+   - شبكة إحداثيات عسكرية (Military Grid) بدقة 6 و 8 أرقام، مقياس رسم تفاعلي، وبوصلة تكتيكية موجهة للشمال الحقيقي.
+   - معالم استراتيجية موثقة وقابلة للتعديل والتعيين الفوري كمواقع للهاون أو أهداف.
+   - مسطرة قياس المسافات والزوايا (Tactical Ruler) لحساب المسافة الأفقية والمائلة (3D Slant Range).
 
-1. **صورة الخريطة والمعايرة (IndexedDB)**:
-   - زر **"رفع صورة الخريطة"** لكل تضاريس (Everon و Arland).
-   - تُخزن الصورة (PNG, JPG, WebP) **محلياً فقط على جهاز المستخدم في IndexedDB** ولا تُرفع لأي خادم إطلاقاً.
-   - تعرض الصورة عبر Leaflet `ImageOverlay` مع دعم الزووم والسحب بسلاسة.
-   - **أداة معايرة بنقطتين**: في حال كانت الصورة مقصوصة جزئياً، يحدد المستخدم نقطتين ويدخل إحداثياتهما ليحسب التطبيق التكبير والإزاحة تلقائياً.
-   - شريط شفافية، زر حذف الصورة، وخيار متقدم لاستخدام رابط بلاطات مخصص `{z}/{x}/{y}`.
-   - عند عدم وجود صورة: خلفية تخطيطية داكنة مع خطوط 1 كم و 100 م وبوصلة وشريط تنبيه يتيح الرفع المباشر.
-   - دليل **"كيف أجهّز صورة الخريطة"**: شرح تفصيلي لالتقاط لقطات الشاشة بالزر M والقص مع تنبيه الاستخدام الشخصي.
+2. **حاسبة المقذوفات وحلول الرماية (Ballistic Solutions):**
+   - دعم كامل لمنظومة **M252 81mm (NATO 6400 MIL)** ومنظومة **2B14 Podnos 82mm (Warsaw Pact 6000 MIL)**.
+   - حساب زوايا الارتفاع (Elevation) بالدرجات والميل، وتحديد عدد الحلقات الدافعة المطلوبة (Charge Rings).
+   - حساب زمن الطيران (TOF)، ذروة الارتفاع (Apex)، زاوية السقوط، وتصحيح فرق الارتفاع (ΔH).
+   - حاسبة تصحيح الرياح العرضية والطولية (Crosswind & Headwind).
 
-2. **الأماكن والمعالم (بدون إحداثيات مختلقة)**:
-   - لا توجد إحداثيات عشوائية. ملف `src/data/pois.json` يحتوي على عينات أولية غير مؤكدة فقط.
-   - **محرر الأماكن**: اضغط مطولاً على الخريطة لإضافة معلم جديد (الاسم بالإنجليزية كما في اللعبة، واسم عربي اختياري، ونوعه).
-   - استيراد وتصدير الأماكن بصيغة JSON لمشاركة المعالم المؤكدة بين أفراد المجتمع.
-   - تسمية الأهداف تلقائياً بأقرب معلم إذا كان ضمن مسافة محددة (مثل 500م)، وإلا استخدام إحداثي الشبكة.
+3. **استرداد وحفظ البيانات (Backup & Restore):**
+   - إمكانية تصدير واستيراد النسخ الاحتياطية بصيغة **JSON** لحفظ أو استرجاع الأهداف المحفوظة (TRPs)، إحداثيات المعالم المخصصة، وإعدادات الواجهة.
+   - حفظ تلقائي مستمر في التخزين المحلي للمتصفح (LocalStorage).
 
-3. **المحرك البالستي واختبار الدقة**:
-   - هاون **M252 (81mm)** و **2B14 (82mm)** من ملف `src/data/ballistics.json`.
-   - **شريط أحمر دائم**: "⚠️ بيانات تجريبية: لا تعتمد على النتائج" وشارة على كل بطاقة حل طالما أن البيانات تجريبية.
-   - **محرر البيانات البالستية**: لإدخال وتصدير واستيراد أرقام الجداول الحقيقية من اللعبة مع خانة إصدار اللعبة.
-   - **اختبار الدقة (Accuracy Test)**: صفحة تتيح إدخال مسافة وارتفاع معروفين من تجربة حقيقية في اللعبة ومقارنة الناتج مع الحاسبة لإظهار نسبة الانحراف.
-   - حساب السمت وزاوية الارتفاع والاستيفاء الخطي وتصحيح فرق الارتفاع ($dElev$).
-   - تصحيح الرمي المرصود من الراصد (Short/Over, Left/Right) مع الفروقات بالمل ($\Delta\text{Az}$, $\Delta\text{El}$).
-   - تذكير دائم بإعادة فحص مؤشرات السبطانة بعد كل رمية بسبب الارتداد.
-
-4. **تبويب السيرفرات (Servers Tab)**:
-   - بطاقة رئيسية برابط مباشر إلى **ArmaHQ**: `https://www.armahq.com/servers` مع إشعار: *"قائمة السيرفرات الحية من ArmaHQ، موقع مستقل وغير تابع لـ Bohemia Interactive ولا لهذا المشروع"*.
-   - بطاقات لسيرفرات اللعبة مع شارات المنصات (PC, Xbox, PS5)، الكروس بلاي، والمودات، وزر نسخ العنوان.
-   - فلترة حسب المنصة ونوع المودات والمنطقة والبحث.
-   - تنبيه الكونسول: أجهزة PS5 لا تدعم سيرفرات المودات حالياً وأجهزة Xbox تدعم فقط المودات المعتمدة.
-   - نموذج لتوليد كود JSON للسيرفرات المجتمعية.
-   - قراءة عدد اللاعبين الحي من `public/servers-status.json` مع إظهار "غير محدّث" إذا مر أكثر من 30 دقيقة، مع قالب سير عمل معطل في GitHub Actions.
+4. **تخصيص الواجهة (UI Customizer):**
+   - محرر تخطيط تفاعلي لتغيير أماكن وأحجام لوحات التحكم على الشاشة وسحبها وتخصيصها.
+   - واجهة ثنائية اللغة تدعم **العربية (RTL)** والإنجليزية (LTR) بتبديل فوري وسلس.
 
 ---
 
 <a name="english"></a>
 ## English 🇬🇧
 
-**Reforger Mortar Map** is a free, static, browser-based tactical mortar calculator and interactive grid map for **Arma Reforger**. Built with React, Vite, TypeScript, and Leaflet using `CRS.Simple`, it features an Arabic RTL interface by default with an instant English toggle, and zero server dependencies for free GitHub Pages hosting.
+**Arma Reforger Fire Control System (FCS)** is a tactical ballistic fire control system and interactive grid map for **Arma Reforger**. Built with React 19, Vite, TypeScript, and Leaflet using authentic Enfusion engine coordinates, featuring dual Arabic (RTL) and English (LTR) language support.
 
 ### Key Features:
+1. **Interactive Tactical Maps:**
+   - Authentic island theaters: **Everon (Eden)**, **Arland**, and **Kolguyev (Cain)** with high-detail Enfusion terrain tiles.
+   - 1:1 metric coordinate alignment, 6 and 8-digit military grid systems, responsive scale bar, and compass rose.
+   - Verified strategic points of interest (Bases, Settlements, Vehicle spawns, Observation peaks).
+   - Rangefinder ruler tool computing both 2D horizontal distance and 3D slant range.
 
-1. **User Map Image & Calibration (IndexedDB)**:
-   - **"Upload Map Image"** button for each terrain (Everon 12.8 km, Arland 5.94 km).
-   - Images are stored **locally in browser IndexedDB** and never uploaded anywhere.
-   - Leaflet `ImageOverlay` with smooth zooming and panning.
-   - **2-Point Calibration Tool**: If your image is cropped or covers a sub-sector, enter two reference coordinates to calculate exact scale and offsets.
-   - Opacity slider, image deletion, and custom tile template `{z}/{x}/{y}` option.
-   - Schematic grid fallback with axis labels and compass when no image is loaded.
-   - **"How to prepare the map image"** guide explaining M key screenshots, stitching, and personal-use license scope.
+2. **Ballistics & Firing Solutions:**
+   - Full support for **M252 81mm (NATO 6400 MIL)** and **2B14 Podnos 82mm (Warsaw Pact 6000 MIL)**.
+   - Real-time tube elevation calculation displayed in both degrees and mils, with exact propellant ring counts.
+   - Time of flight (TOF), max ordinate (apex), angle of fall, and elevation delta (ΔH) corrections.
+   - Tactical wind deflection compensation (crosswind and headwind/tailwind).
 
-2. **Places & POIs (No Invented Data)**:
-   - No made-up locations. Ships with clean/unverified sample markers in `src/data/pois.json`.
-   - **Place Editor**: Long press anywhere on the map to add a place (in-game English name, optional Arabic name, type, notes).
-   - Export and import POIs as JSON to share verified community maps.
-   - Target auto-naming based on nearest POI within configurable radius (e.g. 500m) or military grid reference.
+3. **Data Backup & Target Management:**
+   - Target Reference Points (TRPs) manager to save, organize, and engage priority firing positions.
+   - Full JSON export and import for user targets, landmark overrides, and customized layout profiles.
 
-3. **Calculator, Warnings & Accuracy Testing**:
-   - Authentic models for **M252 (81mm)** and **2B14 Podnos (82mm)**.
-   - **Permanent Red Banner & Badge**: Shows "PLACEHOLDER DATA" while default tables are active.
-   - **Ballistics Editor**: Update, export, and import real game tables with game version and last-updated fields.
-   - **Accuracy Test Tool**: Enter known in-game trial cases (range, height diff, elevation) to measure engine deviation and verify table accuracy.
-   - Fire adjustment tool for spotter corrections with azimuth/elevation deltas.
-   - Recoil tube shift warning.
-
-4. **Servers Tab**:
-   - Top card linking to `https://www.armahq.com/servers` credited to ArmaHQ (independent site).
-   - Server cards with badges for PC, Xbox, PlayStation, Crossplay, and Mods.
-   - Console warning regarding PS5 / Xbox mod limitations.
-   - Filter by platform, mod status, and region.
-   - Community server JSON generator.
-   - Optional status reader from `public/servers-status.json` with outdated (>30 min) badge and disabled GitHub Actions workflow template.
+4. **Interactive UI Customizer:**
+   - Drag-and-drop HUD widget layout editor with scaling from 70% to 135%.
 
 ---
 
 ## Deployment to GitHub Pages
 
-1. Push to GitHub main branch.
-2. In repository settings: **Settings > Pages > Build and deployment > Source: GitHub Actions**.
-3. Built and deployed via `.github/workflows/deploy.yml`.
-
-## Disclaimer
-This project is an unofficial fan-made utility for Arma Reforger. It is not affiliated with, endorsed by, or associated with Bohemia Interactive a.s. Arma Reforger is a trademark of Bohemia Interactive a.s. Live server listings credit to ArmaHQ.
-
-## License
-MIT License for the application source code. Game assets and trademarks retain their respective licenses.
+1. Push your code to the `main` branch:
+   ```bash
+   git push origin main
+   ```
+2. In your repository on GitHub:
+   - Navigate to **Settings > Pages**
+   - Under **Build and deployment > Source**, select **GitHub Actions**
+3. The included workflow (`.github/workflows/main.yml`) will automatically build and deploy the app to GitHub Pages!

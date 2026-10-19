@@ -1,153 +1,239 @@
-import { SavedSession, Target, MortarState, TerrainId } from '../types';
+import {
+  Language,
+  WorldPoint,
+  WeaponType,
+  SavedTarget,
+  MapAppearanceSettings,
+  ShooterData,
+  CustomMortarProfile,
+} from '../types/mortar';
+import {
+  InterfaceVisibilitySettings,
+  DEFAULT_INTERFACE_VISIBILITY,
+  WindSettings,
+  DEFAULT_WIND_SETTINGS,
+} from '../types/settings';
 
-const STORAGE_KEY = 'reforger_mortar_saved_sessions';
-const LAST_STATE_KEY = 'reforger_mortar_last_state';
+export const STORAGE_SCHEMA_VERSION = 3;
+export const STORAGE_KEY = 'arma_reforger_fcs_state_v3';
 
-export function getSavedSessions(): SavedSession[] {
+export interface AppPersistentState {
+  version: number;
+  language: Language;
+  selectedMapId: string;
+  mortar: WorldPoint;
+  target: WorldPoint;
+  weaponType: WeaponType;
+  projectileId: string;
+  preferredCharge?: number;
+  savedTargets: SavedTarget[];
+  appearance: MapAppearanceSettings;
+  interfaceVisibility: InterfaceVisibilitySettings;
+  windSettings: WindSettings;
+  shooterData: ShooterData;
+  customProfiles: CustomMortarProfile[];
+  landmarkOverrides: Record<string, { xMeters: number; yMeters: number; altitudeMeters: number; isCustomized: boolean; updatedAt: number }>;
+}
+
+export const LANDMARK_OVERRIDES_STORAGE_KEY = 'arma_fcs_landmark_overrides_v2';
+
+export const DEFAULT_APPEARANCE: MapAppearanceSettings = {
+  showLabels: true,
+  threeLineLabels: true,
+  labelSize: 'medium',
+  labelOpacity: 0.94,
+  showBases: true,
+  showMotorpools: true,
+  showTowns: true,
+  showHills: true,
+  showGridLines: true,
+  showScaleBar: true,
+  showCompass: true,
+  distanceUnit: 'meters',
+  showSlantDistance: false,
+};
+
+export const DEFAULT_SHOOTER_DATA: ShooterData = {
+  mortarCallsign: 'HAMMER-1',
+  fobLocationName: 'FOB Alpha',
+  crewName: 'Mortar Section 1',
+  sightZeroMils: 0,
+  enableCustomCalibration: false,
+  calibrationRangeOffsetMeters: 0,
+  calibrationAzimuthOffsetMils: 0,
+  sessionNotes: '',
+  records: [],
+};
+
+export const DEFAULT_STATE: AppPersistentState = {
+  version: STORAGE_SCHEMA_VERSION,
+  language: 'ar',
+  selectedMapId: 'everon',
+  mortar: { xMeters: 4880, yMeters: 6700, altitudeMeters: 65 },
+  target: { xMeters: 5124, yMeters: 6981, altitudeMeters: 75 },
+  weaponType: 'm252',
+  projectileId: 'm821-he',
+  landmarkOverrides: {},
+  savedTargets: [
+    {
+      id: 'trp-1',
+      name: 'Montignac Crossroads (تقاطع مونتينياك)',
+      xMeters: 5124,
+      yMeters: 6981,
+      altitudeMeters: 75,
+      timestamp: Date.now() - 3600000,
+      notes: 'تقاطع طرق رئيسي ونقطة تمركز استراتيجية',
+    },
+    {
+      id: 'trp-2',
+      name: 'Airbase Saint-Philippe (قاعدة سانت فيليب)',
+      xMeters: 4888,
+      yMeters: 12030,
+      altitudeMeters: 28,
+      timestamp: Date.now() - 1800000,
+      notes: 'المدرج الرئيسي للقاعدة الجوية الشمالية',
+    },
+  ],
+  appearance: DEFAULT_APPEARANCE,
+  interfaceVisibility: DEFAULT_INTERFACE_VISIBILITY,
+  windSettings: DEFAULT_WIND_SETTINGS,
+  shooterData: DEFAULT_SHOOTER_DATA,
+  customProfiles: [],
+};
+
+export function loadPersistentState(): AppPersistentState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
-
-export function saveSession(session: SavedSession): void {
-  try {
-    const sessions = getSavedSessions();
-    const existingIndex = sessions.findIndex((s) => s.id === session.id);
-    if (existingIndex >= 0) {
-      sessions[existingIndex] = { ...session, updatedAt: Date.now() };
-    } else {
-      sessions.unshift({ ...session, updatedAt: Date.now() });
+    if (!raw) {
+      return DEFAULT_STATE;
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
-  } catch (err) {
-    console.error('Failed to save session to localStorage', err);
-  }
-}
-
-export function deleteSession(id: string): void {
-  try {
-    const sessions = getSavedSessions().filter((s) => s.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions));
-  } catch (err) {
-    console.error('Failed to delete session', err);
-  }
-}
-
-export function saveLastActiveState(state: {
-  terrain: TerrainId;
-  mortar: MortarState;
-  targets: Target[];
-  selectedTargetId: string | null;
-}): void {
-  try {
-    localStorage.setItem(LAST_STATE_KEY, JSON.stringify(state));
-  } catch {
-    // ignore
-  }
-}
-
-export function getLastActiveState(): {
-  terrain: TerrainId;
-  mortar: MortarState;
-  targets: Target[];
-  selectedTargetId: string | null;
-} | null {
-  try {
-    const raw = localStorage.getItem(LAST_STATE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Encode current mission state to URL hash query
- */
-export function encodeMissionToHash(
-  terrain: TerrainId,
-  mortar: MortarState,
-  targets: Target[],
-  selectedTargetId: string | null
-): string {
-  try {
-    const payload = {
-      t: terrain,
-      m: {
-        x: Math.round(mortar.x),
-        y: Math.round(mortar.y),
-        a: Math.round(mortar.altitude),
-        type: mortar.type,
-        mil: mortar.milSystem,
-        ch: mortar.selectedChargeOverride,
-      },
-      tgts: targets.map((tgt) => ({
-        id: tgt.id,
-        n: tgt.name,
-        x: Math.round(tgt.x),
-        y: Math.round(tgt.y),
-        a: Math.round(tgt.altitude),
-        c: tgt.color,
-      })),
-      sel: selectedTargetId,
-    };
-    const jsonStr = JSON.stringify(payload);
-    // Base64 encode for clean URL hash
-    return '#' + encodeURIComponent(btoa(unescape(encodeURIComponent(jsonStr))));
-  } catch {
-    return '';
-  }
-}
-
-/**
- * Decode mission state from URL hash
- */
-export function decodeMissionFromHash(hashStr: string): {
-  terrain: TerrainId;
-  mortar: MortarState;
-  targets: Target[];
-  selectedTargetId: string | null;
-} | null {
-  try {
-    const cleanHash = hashStr.startsWith('#') ? hashStr.slice(1) : hashStr;
-    if (!cleanHash) return null;
-
-    const jsonStr = decodeURIComponent(escape(atob(decodeURIComponent(cleanHash))));
-    const parsed = JSON.parse(jsonStr);
-
-    if (!parsed || !parsed.m) return null;
-
-    const terrain: TerrainId = parsed.t === 'arland' ? 'arland' : 'everon';
-    const mortar: MortarState = {
-      x: Number(parsed.m.x) || 4500,
-      y: Number(parsed.m.y) || 7200,
-      altitude: Number(parsed.m.a) || 50,
-      type: parsed.m.type || 'M252',
-      milSystem: parsed.m.mil === '6000' ? '6000' : '6400',
-      selectedChargeOverride: parsed.m.ch !== undefined ? parsed.m.ch : null,
-    };
-
-    const targets: Target[] = Array.isArray(parsed.tgts)
-      ? parsed.tgts.map((tgt: any, idx: number) => ({
-          id: tgt.id || `target-${Date.now()}-${idx}`,
-          name: tgt.n || `Target ${idx + 1}`,
-          x: Number(tgt.x) || 5000,
-          y: Number(tgt.y) || 8000,
-          altitude: Number(tgt.a) || 50,
-          color: tgt.c || '#ef4444',
-          createdAt: Date.now(),
-        }))
-      : [];
-
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || parsed.version !== STORAGE_SCHEMA_VERSION) {
+      return DEFAULT_STATE;
+    }
     return {
-      terrain,
-      mortar,
-      targets,
-      selectedTargetId: parsed.sel || (targets[0] ? targets[0].id : null),
+      version: STORAGE_SCHEMA_VERSION,
+      language: parsed.language === 'ar' || parsed.language === 'en' ? parsed.language : 'ar',
+      selectedMapId: typeof parsed.selectedMapId === 'string' ? parsed.selectedMapId : 'everon',
+      mortar: parsed.mortar && typeof parsed.mortar.xMeters === 'number' ? parsed.mortar : DEFAULT_STATE.mortar,
+      target: parsed.target && typeof parsed.target.xMeters === 'number' ? parsed.target : DEFAULT_STATE.target,
+      weaponType: parsed.weaponType === 'b2b14' ? 'b2b14' : 'm252',
+      projectileId: typeof parsed.projectileId === 'string' ? parsed.projectileId : 'm821-he',
+      preferredCharge: typeof parsed.preferredCharge === 'number' ? parsed.preferredCharge : undefined,
+      savedTargets: Array.isArray(parsed.savedTargets) ? parsed.savedTargets : DEFAULT_STATE.savedTargets,
+      landmarkOverrides: parsed.landmarkOverrides && typeof parsed.landmarkOverrides === 'object'
+        ? parsed.landmarkOverrides
+        : loadLandmarkOverrides(),
+      appearance: {
+        ...DEFAULT_APPEARANCE,
+        ...(parsed.appearance && typeof parsed.appearance === 'object' ? parsed.appearance : {}),
+      },
+      interfaceVisibility: {
+        ...DEFAULT_INTERFACE_VISIBILITY,
+        ...(parsed.interfaceVisibility && typeof parsed.interfaceVisibility === 'object' ? parsed.interfaceVisibility : {}),
+      },
+      windSettings: {
+        ...DEFAULT_WIND_SETTINGS,
+        ...(parsed.windSettings && typeof parsed.windSettings === 'object' ? parsed.windSettings : {}),
+      },
+      shooterData: {
+        ...DEFAULT_SHOOTER_DATA,
+        ...(parsed.shooterData && typeof parsed.shooterData === 'object' ? parsed.shooterData : {}),
+      },
+      customProfiles: Array.isArray(parsed.customProfiles) ? parsed.customProfiles : [],
+    };
+  } catch (err) {
+    console.warn('[FCS Storage] Error reading state from localStorage:', err);
+    return DEFAULT_STATE;
+  }
+}
+
+export function loadLandmarkOverrides(): Record<string, { xMeters: number; yMeters: number; altitudeMeters: number; isCustomized: boolean; updatedAt: number }> {
+  try {
+    const raw = localStorage.getItem(LANDMARK_OVERRIDES_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveLandmarkOverride(
+  id: string,
+  override: { xMeters: number; yMeters: number; altitudeMeters: number }
+): Record<string, { xMeters: number; yMeters: number; altitudeMeters: number; isCustomized: boolean; updatedAt: number }> {
+  const current = loadLandmarkOverrides();
+  const updated = {
+    ...current,
+    [id]: {
+      ...override,
+      isCustomized: true,
+      updatedAt: Date.now(),
+    },
+  };
+  try {
+    localStorage.setItem(LANDMARK_OVERRIDES_STORAGE_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.warn('[FCS Storage] Failed to save landmark override:', err);
+  }
+  return updated;
+}
+
+export function removeLandmarkOverride(id: string): Record<string, { xMeters: number; yMeters: number; altitudeMeters: number; isCustomized: boolean; updatedAt: number }> {
+  const current = loadLandmarkOverrides();
+  delete current[id];
+  try {
+    localStorage.setItem(LANDMARK_OVERRIDES_STORAGE_KEY, JSON.stringify(current));
+  } catch (err) {
+    console.warn('[FCS Storage] Failed to remove landmark override:', err);
+  }
+  return current;
+}
+
+export function clearAllLandmarkOverrides(): void {
+  try {
+    localStorage.removeItem(LANDMARK_OVERRIDES_STORAGE_KEY);
+  } catch (err) {
+    console.warn('[FCS Storage] Failed to clear landmark overrides:', err);
+  }
+}
+
+export function savePersistentState(state: Partial<AppPersistentState>): void {
+  try {
+    const current = loadPersistentState();
+    const updated: AppPersistentState = {
+      ...current,
+      ...state,
+      version: STORAGE_SCHEMA_VERSION,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.warn('[FCS Storage] Error saving state to localStorage:', err);
+  }
+}
+
+export function exportStateToFile(state: AppPersistentState): void {
+  const jsonStr = JSON.stringify(state, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `arma-reforger-fcs-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export function parseStateBackup(jsonString: string): AppPersistentState | null {
+  try {
+    const parsed = JSON.parse(jsonString);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      ...DEFAULT_STATE,
+      ...parsed,
+      version: STORAGE_SCHEMA_VERSION,
     };
   } catch {
     return null;

@@ -1,6 +1,8 @@
 {
-  "name": "Reforger Mortar Map (خريطة هاون ريفورجر)",
-  "description": "Tactical mortar calculator and interactive grid map for Arma Reforger with ballistics tables, RTL Arabic/English UI, and fire adjustment.",
+  "name": "Arma Reforger Fire Control System",
+  "description": "Tactical ballistic fire control system for Arma Reforger featuring authentic interactive maps (Everon, Arland, Kolguyev), precision coordinate alignment, M252 and 2B14 mortar calculations, and dual LTR/RTL support.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
